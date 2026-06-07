@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Critical Care Calculators</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+<style>
+  :root {
+    --major:      #d94656;
+    --major-bg:   #fdecef;
+    --minor:      #f0a44a;
+    --minor-bg:   #fdf3e6;
+    --bg:         #f0f4f9;
+    --card:       #ffffff;
+    --border:     #d9e0e8;
+    --text:       #1f2a37;
+    --muted:      #6b7785;
+    --accent:     #1d4ed8;
+    --accent-lt:  #eff4ff;
+    --green:      #16a34a;
+    --green-bg:   #f0fdf4;
+    --amber:      #d97706;
+    --amber-bg:   #fffbeb;
+    --red:        #dc2626;
+    --red-bg:     #fef2f2;
+    --sidebar-w:  240px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    margin: 0; line-height: 1.5; min-height: 100vh;
+  }
+  .shell { display: flex; min-height: 100vh; }
+
+  /* ---- Sidebar ---- */
+  .sidebar {
+    width: var(--sidebar-w); background: #1a2233; color: #c8d3e0;
+    display: flex; flex-direction: column; flex-shrink: 0;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .sidebar-header { padding: 20px 16px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .sidebar-header .site-title { font-size: 15px; font-weight: 700; color: #fff; margin: 0 0 2px 0; }
+  .sidebar-header .site-sub { font-size: 11px; color: #8090a4; margin: 0; }
+  .sidebar-section { padding: 12px 12px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: #5a6e84; font-weight: 600; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px; font-size: 13.5px; color: #c8d3e0;
+    cursor: pointer; border-left: 3px solid transparent;
+    transition: background 0.1s, color 0.1s; user-select: none;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .nav-item.active { background: rgba(29,78,216,0.25); border-left-color: #3b82f6; color: #fff; }
+  .nav-item .nav-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+  .nav-item .nav-label { flex: 1; }
+  .nav-item .nav-tag { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,0.1); color: #8090a4; }
+  .sidebar-footer { margin-top: auto; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: #4a5a6e; }
+
+  /* ---- Main ---- */
+  .main { flex: 1; overflow-y: auto; padding: 28px 28px 40px; min-width: 0; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .page-header { margin-bottom: 20px; }
+  .page-header h1 { margin: 0 0 4px 0; font-size: 24px; }
+  .page-header .subtitle { color: var(--muted); font-size: 13px; margin: 0; }
+
+  /* ---- Controls / buttons ---- */
+  .controls { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; align-items: center; }
+  button.btn {
+    padding: 8px 14px; border: 1px solid var(--border); background: #fff;
+    border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--text); font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button.btn:hover { background: #f1f4f8; }
+  button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.btn.primary:hover { background: #1e40af; }
+  button.btn.scan { background: #0f766e; color: #fff; border-color: #0f766e; }
+  button.btn.scan:hover { background: #0d6460; }
+  button.btn.danger { background: var(--red); color: #fff; border-color: var(--red); }
+  button.btn.danger:hover { background: #b91c1c; }
+
+  /* ---- Cards ---- */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card h2 { margin: 0 0 14px 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; margin-left: auto; }
+  .badge.major { background: var(--major-bg); color: var(--major); }
+  .badge.minor { background: var(--minor-bg); color: var(--minor); }
+  .badge.zero  { background: #eef2f6; color: var(--muted); }
+
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .ctx-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+  .field select, .field input[type="number"] {
+    padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 14px; font-family: inherit; background: #fff; color: var(--text);
+  }
+  .field select {
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236b7785' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px;
+  }
+  .field select:focus, .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(29,78,216,0.12); }
+  .field.set-major select, .field.set-major input { border-color: var(--major); background-color: var(--major-bg); }
+  .field.set-minor select, .field.set-minor input { border-color: var(--minor); background-color: var(--minor-bg); }
+  .field.set-abnormal select, .field.set-abnormal input { border-color: var(--red); background-color: var(--red-bg); }
+  .field.set-normal select, .field.set-normal input { border-color: var(--green); background-color: var(--green-bg); }
+  /* Highlight fields auto-filled by OCR */
+  .field.ocr-filled select, .field.ocr-filled input { border-color: #7c3aed; background-color: #f5f3ff; box-shadow: 0 0 0 2px rgba(124,58,237,0.15); }
+
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; font-style: italic; }
+
+  /* ---- Summary dark card ---- */
+  .summary { background: linear-gradient(135deg, #1a2233, #2d3e56); color: #fff; border: none; }
+  .summary h2 { color: #fff; }
+  .score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
+  .score-grid .cell { background: rgba(255,255,255,0.08); padding: 10px; border-radius: 8px; text-align: center; }
+  .score-grid .cell .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+  .score-grid .cell .val { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .total-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: rgba(255,255,255,0.1); border-radius: 8px; margin-top: 8px; }
+  .total-row .total-label { font-size: 14px; opacity: 0.85; }
+  .total-row .total-val { font-size: 32px; font-weight: 700; }
+  .total-row .total-max { font-size: 16px; opacity: 0.6; }
+
+  /* ---- Interpretation boxes ---- */
+  .interp { margin-top: 10px; padding: 12px 14px; border-radius: 8px; font-size: 14px; line-height: 1.45; }
+  .interp.high { background: rgba(220,38,38,0.18); border-left: 4px solid #ef4444; }
+  .interp.mid  { background: rgba(245,158,11,0.18); border-left: 4px solid #f59e0b; }
+  .interp.low  { background: rgba(34,197,94,0.18);  border-left: 4px solid #22c55e; }
+  .interp.info { background: rgba(29,78,216,0.12);  border-left: 4px solid #3b82f6; }
+  .interp strong { display: block; margin-bottom: 2px; font-size: 15px; }
+
+  /* ---- ROTEM ---- */
+  .rotem-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .reco-list { display: flex; flex-direction: column; gap: 8px; }
+  .reco-item { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; align-items: flex-start; }
+  .reco-item.critical { background: var(--red-bg); border-left: 3px solid var(--red); }
+  .reco-item.warning  { background: var(--amber-bg); border-left: 3px solid var(--amber); }
+  .reco-item.normal   { background: var(--green-bg); border-left: 3px solid var(--green); }
+  .reco-item.info     { background: var(--accent-lt); border-left: 3px solid #3b82f6; }
+  .reco-item .reco-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .reco-item .reco-text strong { display: block; margin-bottom: 1px; }
+  .ref-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .ref-table th { text-align: left; padding: 6px 10px; background: var(--bg); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .ref-table td { padding: 7px 10px; border-bottom: 1px solid #f0f2f5; }
+  .ref-table tr:last-child td { border-bottom: none; }
+
+  /* ---- Home grid ---- */
+  .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
+  .calc-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; transition: box-shadow 0.15s, transform 0.1s; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .calc-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-1px); }
+  .calc-card .cc-icon { font-size: 32px; margin-bottom: 10px; }
+  .calc-card .cc-title { font-size: 16px; font-weight: 700; margin: 0 0 4px 0; }
+  .calc-card .cc-desc { font-size: 13px; color: var(--muted); margin: 0; }
+  .calc-card .cc-tag { display: inline-block; margin-top: 10px; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--accent-lt); color: var(--accent); font-weight: 600; }
+
+  .footer { font-size: 12px; color: var(--muted); margin-top: 20px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .footer p { margin: 4px 0; }
+
+  /* ================================================================
+     CAMERA / OCR MODAL
+     ================================================================ */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; width: min(680px, 96vw);
+    max-height: 92vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    display: flex; flex-direction: column;
+  }
+  .modal-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; background: #fff; z-index: 1; border-radius: 14px 14px 0 0;
+  }
+  .modal-header h3 { margin: 0; font-size: 16px; }
+  .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--muted); padding: 0 4px; line-height: 1; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 20px; flex: 1; }
+  .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; background: #f8fafb; border-radius: 0 0 14px 14px; }
+
+  /* Camera preview */
+  .cam-container {
+    position: relative; background: #0a0a0a; border-radius: 8px;
+    overflow: hidden; width: 100%; aspect-ratio: 4/3;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cam-video { width: 100%; height: 100%; object-fit: cover; display: none; }
+  #cam-canvas { width: 100%; height: 100%; object-fit: contain; display: none; }
+  .cam-placeholder { text-align: center; color: #aaa; padding: 40px 20px; }
+  .cam-placeholder .cam-ph-icon { font-size: 48px; margin-bottom: 10px; }
+  .cam-placeholder p { margin: 4px 0; font-size: 14px; }
+
+  /* Camera controls */
+  .cam-controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
+
+  /* OCR Status */
+  .ocr-status {
+    margin-top: 14px; padding: 12px 14px; border-radius: 8px;
+    background: var(--accent-lt); border: 1px solid #bfdbfe;
+    font-size: 13px; display: none;
+  }
+  .ocr-status.visible { display: flex; align-items: center; gap: 10px; }
+  .ocr-spinner {
+    width: 18px; height: 18px; border: 2px solid #93c5fd;
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* OCR Results */
+  .ocr-results { margin-top: 16px; display: none; }
+  .ocr-results.visible { display: block; }
+  .ocr-results h4 { margin: 0 0 10px 0; font-size: 14px; color: var(--text); }
+  .ocr-item-list { display: flex; flex-direction: column; gap: 6px; }
+  .ocr-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    background: #f8fafc; border: 1px solid var(--border);
+  }
+  .ocr-item.found { background: var(--green-bg); border-color: #bbf7d0; }
+  .ocr-item.not-found { background: #f8fafc; color: var(--muted); }
+  .ocr-item input[type="checkbox"] { width: 15px; height: 15px; flex-shrink: 0; accent-color: var(--accent); }
+  .ocr-item .ocr-field-name { font-weight: 600; flex: 1; }
+  .ocr-item .ocr-field-val { font-family: monospace; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; }
+  .ocr-item .ocr-field-mapped { font-size: 11px; color: var(--muted); margin-left: 4px; }
+
+  /* Raw OCR text (collapsible) */
+  .ocr-raw details { margin-top: 12px; }
+  .ocr-raw summary { cursor: pointer; font-size: 12px; color: var(--accent); }
+  .ocr-raw pre { font-size: 11px; background: #f1f4f8; padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; max-height: 200px; overflow-y: auto; margin: 6px 0 0 0; color: var(--muted); }
+
+  /* ---- PE calculator ---- */
+  .pe-check-field {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: #fff;
+    font-size: 13.5px; transition: background 0.1s;
+  }
+  .pe-check-field:hover { background: #f8fafc; }
+  .pe-check-field input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; accent-color: var(--accent); }
+  .pe-check-field.pe-check-hestia { border-color: #fde68a; background: #fffbeb; }
+  .pe-check-field.pe-check-hestia:hover { background: #fef3c7; }
+  .pe-check-label { flex: 1; line-height: 1.4; }
+  .pe-check-pts { font-weight: 700; color: var(--accent); flex-shrink: 0; }
+  .pe-check-field.checked { border-color: var(--accent); background: var(--accent-lt); }
+  .pe-check-field.pe-check-hestia.checked { border-color: var(--red); background: var(--red-bg); }
+
+  /* PE Result card */
+  .pe-cat-banner {
+    display: flex; align-items: center; gap: 16px; padding: 16px 20px;
+    border-radius: 10px; margin-bottom: 16px;
+  }
+  .pe-cat-letter {
+    font-size: 56px; font-weight: 900; line-height: 1; flex-shrink: 0;
+    width: 72px; text-align: center;
+  }
+  .pe-cat-info { flex: 1; }
+  .pe-cat-title { font-size: 20px; font-weight: 700; margin: 0 0 2px 0; }
+  .pe-cat-subtitle { font-size: 13px; opacity: 0.85; margin: 0; }
+
+  .pe-cat-A { background: #dcfce7; border: 2px solid #16a34a; color: #14532d; }
+  .pe-cat-B { background: #cffafe; border: 2px solid #0891b2; color: #164e63; }
+  .pe-cat-C { background: #fef3c7; border: 2px solid #d97706; color: #78350f; }
+  .pe-cat-D { background: #ffedd5; border: 2px solid #ea580c; color: #7c2d12; }
+  .pe-cat-E { background: #fee2e2; border: 2px solid #dc2626; color: #7f1d1d; }
+
+  .pe-reco-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 14px;
+  }
+  .pe-reco-box {
+    padding: 12px 14px; border-radius: 8px; font-size: 13px; border: 1px solid var(--border);
+    background: #f8fafc;
+  }
+  .pe-reco-box h4 { margin: 0 0 6px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+  .pe-reco-box p { margin: 0; line-height: 1.5; }
+  .pe-reco-box.highlight { background: #fff; border-color: #fca5a5; }
+  .pe-reco-box.pert { background: #eff4ff; border-color: #93c5fd; }
+  .pe-alert {
+    padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-top: 8px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .pe-alert.warning { background: var(--amber-bg); border-left: 3px solid var(--amber); }
+  .pe-alert.danger  { background: var(--red-bg);   border-left: 3px solid var(--red); }
+  .pe-alert.info    { background: var(--accent-lt); border-left: 3px solid #3b82f6; }
+  .pe-alert.green   { background: var(--green-bg);  border-left: 3px solid var(--green); }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 700px) {
+    .shell { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: static; }
+    .main { padding: 16px; }
+    .score-grid { grid-template-columns: repeat(2, 1fr); }
+    .ctx-row { grid-template-columns: 1fr; }
+    .sidebar-footer { display: none; }
+  }
+  @media print {
+    .sidebar, .controls, .modal-overlay { display: none !important; }
+    .main { padding: 0; }
+    .page { display: block !important; }
+    .page:not(.active) { display: none !important; }
+    .card { box-shadow: none; page-break-inside: avoid; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     CAMERA / OCR MODAL (shared)
+     ================================================================ -->
+<div class="modal-overlay" id="scan-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">📷 Scan &amp; Auto-Fill</h3>
+      <button class="modal-close" onclick="closeScanModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Camera / image preview -->
+      <div class="cam-container" id="cam-container">
+        <video id="cam-video" autoplay playsinline></video>
+        <canvas id="cam-canvas"></canvas>
+        <div class="cam-placeholder" id="cam-placeholder">
+          <div class="cam-ph-icon">📷</div>
+          <p><strong>Open camera or upload an image</strong></p>
+          <p style="font-size:12px;">Point at the printout, monitor screen, or report page</p>
+        </div>
+      </div>
+
+      <div class="cam-controls">
+        <button class="btn scan" id="btn-open-camera" onclick="openCamera()">📷 Open Camera</button>
+        <button class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none">📸 Capture Photo</button>
+        <button class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none">🔄 Retake</button>
+        <label class="btn" style="cursor:pointer">
+          📁 Upload Image
+          <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
+        </label>
+        <button class="btn primary" id="btn-analyze" onclick="runOCR()" style="display:none">🔍 Analyze Image</button>
+      </div>
+
+      <!-- OCR Status -->
+      <div class="ocr-status" id="ocr-status">
+        <div class="ocr-spinner"></div>
+        <span id="ocr-status-text">Initializing OCR engine…</span>
+      </div>
+
+      <!-- OCR Results -->
+      <div class="ocr-results" id="ocr-results">
+        <h4>Detected values — uncheck any you don't want applied:</h4>
+        <div class="ocr-item-list" id="ocr-item-list"></div>
+        <div class="ocr-raw">
+          <details>
+            <summary>View raw OCR text</summary>
+            <pre id="ocr-raw-text"></pre>
+          </details>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeScanModal()">Cancel</button>
+      <button class="btn primary" id="btn-apply" onclick="applyOCRValues()" style="display:none">✅ Apply to Calculator</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     SHELL
+     ================================================================ -->
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <p class="site-title">Critical Care Calculators</p>
+      <p class="site-sub">Clinical Decision Support</p>
+    </div>
+    <div class="sidebar-section">Calculators</div>
+    <div class="nav-item active" data-page="home" onclick="showPage('home',this)">
+      <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item" data-page="hfapeff" onclick="showPage('hfapeff',this)">
+      <span class="nav-icon">🫀</span><span class="nav-label">HFA-PEFF Score</span><span class="nav-tag">HFpEF</span>
+    </div>
+    <div class="nav-item" data-page="rotem" onclick="showPage('rotem',this)">
+      <span class="nav-icon">🩸</span><span class="nav-label">ROTEM Interpreter</span><span class="nav-tag">Coag</span>
+    </div>
+    <div class="nav-item" data-page="pe" onclick="showPage('pe',this)">
+      <span class="nav-icon">🫁</span><span class="nav-label">PE Risk Category</span><span class="nav-tag">2026</span>
+    </div>
+    <!-- ADD MORE: copy a nav-item here and add a page section below -->
+    <div class="sidebar-footer">For clinical decision support only.<br>Confirm against current guidelines.</div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ===================== HOME ===================== -->
+    <div id="page-home" class="page active">
+      <div class="page-header">
+        <h1>Critical Care Calculators</h1>
+        <p class="subtitle">Clinical decision support tools — tap any card to open a calculator</p>
+      </div>
+      <div class="home-grid">
+        <div class="calc-card" onclick="showPage('hfapeff', document.querySelector('[data-page=hfapeff]'))">
+          <div class="cc-icon">🫀</div>
+          <p class="cc-title">HFA-PEFF Score</p>
+          <p class="cc-desc">Diagnostic algorithm for HFpEF. Scores functional, morphological, and biomarker domains. Supports camera scan of echo reports.</p>
+          <span class="cc-tag">Heart Failure</span>
+        </div>
+        <div class="calc-card" onclick="showPage('rotem', document.querySelector('[data-page=rotem]'))">
+          <div class="cc-icon">🩸</div>
+          <p class="cc-title">ROTEM Interpreter</p>
+          <p class="cc-desc">EXTEM · INTEM · FIBTEM · APTEM. Guides product replacement in coagulopathy. Point camera at ROTEM printout to auto-fill.</p>
+          <span class="cc-tag">Coagulation</span>
+        </div>
+        <div class="calc-card" onclick="showPage('pe', document.querySelector('[data-page=pe]'))">
+          <div class="cc-icon">🫁</div>
+          <p class="cc-title">PE Risk Category</p>
+          <p class="cc-desc">2026 AHA/ACC 5-category classification (A–E). Integrates sPESI, biomarkers, RV imaging, and hemodynamics to guide disposition and therapy.</p>
+          <span class="cc-tag">2026 Guideline</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== HFA-PEFF ===================== -->
+    <div id="page-hfapeff" class="page">
+      <div class="page-header">
+        <h1>HFA-PEFF Score Calculator</h1>
+        <p class="subtitle">Heart Failure Association diagnostic algorithm for HFpEF (Pieske et al., Eur Heart J 2019)</p>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" onclick="window.print()">🖨️ Print / PDF</button>
+        <button class="btn scan" onclick="openScanModal('hfapeff')">📷 Scan Echo Report</button>
+        <button class="btn" onclick="peffResetAll()">↺ Reset</button>
+      </div>
+
+      <div class="card" style="background:#fffbeb;border-color:#fde68a;" id="peff-ocr-banner" style="display:none"></div>
+
+      <div class="card">
+        <h2>👤 Patient Context</h2>
+        <div class="ctx-row">
+          <div class="field">
+            <label for="peff-sex">Sex (changes LVMI thresholds)</label>
+            <select id="peff-sex" onchange="peffRebuild()"><option value="M">Male</option><option value="F">Female</option></select>
+          </div>
+          <div class="field">
+            <label for="peff-rhythm">Rhythm (changes biomarker thresholds)</label>
+            <select id="peff-rhythm" onchange="peffRebuild()"><option value="SR">Sinus Rhythm</option><option value="AF">Atrial Fibrillation</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Functional Domain <span id="peff-badge-func" class="badge zero">0 pts</span></h2>
+        <div class="row" id="peff-row-func"></div>
+        <div class="note">Domain scores 2 pts if any Major is selected, otherwise 1 pt if any Minor is selected.</div>
+      </div>
+
+      <div class="card">
+        <h2>🔬 Morphological Domain <span id="peff-badge-morph" class="badge zero">0 pts</span></h2>
+        <div class="row" id="peff-row-morph"></div>
+        <div class="note">LVMI ≥ Major-cutoff combined with RWT &gt; 0.42 = Major. Either alone counts as Minor.</div>
+      </div>
+
+      <div class="card">
+        <h2>🧪 Biomarker Domain <span id="peff-badge-bio" class="badge zero">0 pts</span></h2>
+        <div class="row" id="peff-row-bio"></div>
+        <div class="note">Thresholds adjust based on rhythm selected above.</div>
+      </div>
+
+      <div class="card summary">
+        <h2 style="color:#fff;">📋 Score Summary</h2>
+        <div class="score-grid">
+          <div class="cell"><div class="lbl">Functional</div><div class="val" id="peff-sc-func">0</div></div>
+          <div class="cell"><div class="lbl">Morphological</div><div class="val" id="peff-sc-morph">0</div></div>
+          <div class="cell"><div class="lbl">Biomarker</div><div class="val" id="peff-sc-bio">0</div></div>
+          <div class="cell"><div class="lbl">Domains</div><div class="val" id="peff-sc-domains">0/3</div></div>
+        </div>
+        <div class="total-row">
+          <div class="total-label">Total HFA-PEFF Score</div>
+          <div><span class="total-val" id="peff-total">0</span><span class="total-max"> / 6</span></div>
+        </div>
+        <div id="peff-interp" class="interp low">
+          <strong>Make selections to calculate</strong>Each domain max 2 pts (Major) or 1 pt (Minor). Maximum total = 6.
+        </div>
+      </div>
+
+      <div class="footer">
+        <p><strong>Reference:</strong> Pieske B et al. <em>Eur Heart J</em> 2019;40(40):3297–3317.</p>
+        <p style="font-size:11px;margin-top:8px;">Clinical decision support only. Confirm against current guidelines.</p>
+      </div>
+    </div>
+
+    <!-- ===================== ROTEM ===================== -->
+    <div id="page-rotem" class="page">
+      <div class="page-header">
+        <h1>ROTEM Interpreter</h1>
+        <p class="subtitle">Rotational thromboelastometry — interpretation and product guidance</p>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" onclick="window.print()">🖨️ Print / PDF</button>
+        <button class="btn scan" onclick="openScanModal('rotem')">📷 Scan ROTEM Printout</button>
+        <button class="btn" onclick="rotemReset()">↺ Reset</button>
+      </div>
+
+      <div class="card">
+        <h2>🔵 EXTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Extrinsic pathway)</span></h2>
+        <div class="rotem-grid">
+          <div class="field" id="field-extem-ct"><label>CT (s) [ref 38–79]</label><input type="number" id="extem-ct" placeholder="e.g. 65" oninput="rotemCalc()"></div>
+          <div class="field" id="field-extem-cft"><label>CFT (s) [ref 34–159]</label><input type="number" id="extem-cft" placeholder="e.g. 80" oninput="rotemCalc()"></div>
+          <div class="field" id="field-extem-alpha"><label>Alpha angle (°) [ref 63–83]</label><input type="number" id="extem-alpha" placeholder="e.g. 72" oninput="rotemCalc()"></div>
+          <div class="field" id="field-extem-mcf"><label>MCF (mm) [ref 50–72]</label><input type="number" id="extem-mcf" placeholder="e.g. 58" oninput="rotemCalc()"></div>
+          <div class="field" id="field-extem-li30"><label>LI30 (%) [ref ≥ 85]</label><input type="number" id="extem-li30" placeholder="e.g. 97" oninput="rotemCalc()"></div>
+          <div class="field" id="field-extem-li60"><label>LI60 (%) [ref ≥ 85]</label><input type="number" id="extem-li60" placeholder="e.g. 96" oninput="rotemCalc()"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🟣 INTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Intrinsic pathway)</span></h2>
+        <div class="rotem-grid">
+          <div class="field" id="field-intem-ct"><label>CT (s) [ref 100–240]</label><input type="number" id="intem-ct" placeholder="e.g. 180" oninput="rotemCalc()"></div>
+          <div class="field" id="field-intem-cft"><label>CFT (s) [ref 30–110]</label><input type="number" id="intem-cft" placeholder="e.g. 60" oninput="rotemCalc()"></div>
+          <div class="field" id="field-intem-alpha"><label>Alpha angle (°) [ref 70–83]</label><input type="number" id="intem-alpha" placeholder="e.g. 76" oninput="rotemCalc()"></div>
+          <div class="field" id="field-intem-mcf"><label>MCF (mm) [ref 50–72]</label><input type="number" id="intem-mcf" placeholder="e.g. 58" oninput="rotemCalc()"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🟦 FIBTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Fibrinogen / fibrin clot)</span></h2>
+        <div class="rotem-grid">
+          <div class="field" id="field-fibtem-mcf"><label>MCF (mm) [ref 9–25]</label><input type="number" id="fibtem-mcf" placeholder="e.g. 14" oninput="rotemCalc()"></div>
+          <div class="field" id="field-fibtem-a5"><label>A5 (mm) [ref ≥ 7, optional]</label><input type="number" id="fibtem-a5" placeholder="e.g. 9" oninput="rotemCalc()"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🟢 APTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Fibrinolysis — optional)</span></h2>
+        <div class="rotem-grid">
+          <div class="field" id="field-aptem-mcf"><label>MCF (mm) [compare to EXTEM]</label><input type="number" id="aptem-mcf" placeholder="e.g. 58" oninput="rotemCalc()"></div>
+          <div class="field" id="field-aptem-li30"><label>LI30 (%) [ref ≥ 85]</label><input type="number" id="aptem-li30" placeholder="e.g. 97" oninput="rotemCalc()"></div>
+        </div>
+        <div class="note">APTEM corrects for fibrinolysis. APTEM MCF significantly higher than EXTEM MCF confirms hyperfibrinolysis.</div>
+      </div>
+
+      <div class="card summary">
+        <h2 style="color:#fff;">📋 Interpretation &amp; Recommendations</h2>
+        <div id="rotem-results"><div class="interp info"><strong>Enter values above to generate interpretation</strong>Enter one or more ROTEM parameters to see coagulation assessment and product recommendations.</div></div>
+      </div>
+
+      <div class="card">
+        <h2>💉 Platelet Contribution Estimate</h2>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 8px 0">Platelet contribution ≈ EXTEM MCF − FIBTEM MCF. Difference &gt;15 mm → platelets contributing substantially.</p>
+        <div id="platelet-contrib" class="interp info" style="margin:0"><strong>—</strong>Enter EXTEM MCF and FIBTEM MCF to estimate.</div>
+      </div>
+
+      <div class="card">
+        <h2>📖 Reference Ranges</h2>
+        <table class="ref-table">
+          <thead><tr><th>Assay</th><th>Parameter</th><th>Reference</th><th>If Abnormal</th></tr></thead>
+          <tbody>
+            <tr><td>EXTEM</td><td>CT</td><td>38–79 s</td><td>↑: extrinsic pathway defect → FFP / PCC</td></tr>
+            <tr><td>EXTEM</td><td>CFT</td><td>34–159 s</td><td>↑: slow clot formation → fibrinogen ± platelets</td></tr>
+            <tr><td>EXTEM</td><td>Alpha angle</td><td>63–83°</td><td>↓: slow clot formation → fibrinogen ± platelets</td></tr>
+            <tr><td>EXTEM</td><td>MCF</td><td>50–72 mm</td><td>↓: clot strength ↓ → fibrinogen and/or platelets</td></tr>
+            <tr><td>EXTEM</td><td>LI30/LI60</td><td>≥ 85%</td><td>↓: hyperfibrinolysis → tranexamic acid</td></tr>
+            <tr><td>INTEM</td><td>CT</td><td>100–240 s</td><td>↑: intrinsic pathway or heparin → check HEPTEM / FFP</td></tr>
+            <tr><td>FIBTEM</td><td>MCF</td><td>9–25 mm</td><td>&lt;9: fibrinogen deficiency → fibrinogen conc. / cryoprecipitate</td></tr>
+            <tr><td>FIBTEM</td><td>A5</td><td>≥ 7 mm</td><td>&lt;7: early fibrinogen deficiency</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer">
+        <p><strong>References:</strong> Görlinger K et al. <em>Anesthesiology</em> 2011;115(5):1179. Lang T et al. <em>J Thromb Haemost</em> 2005;3(3):586–592.</p>
+        <p style="font-size:11px;margin-top:8px;">Clinical decision support only. Confirm against institutional protocols.</p>
+      </div>
+    </div>
+
+    <!-- ===================== PE RISK CATEGORY ===================== -->
+    <div id="page-pe" class="page">
+      <div class="page-header">
+        <h1>Acute PE Clinical Category (A–E)</h1>
+        <p class="subtitle">2026 AHA/ACC/ACCP/ACEP/CHEST/SCAI/SHM/SIR/SVM/SVN Guideline — Creager MA et al., <em>Circulation</em> 2026;153(12):e977–e1051</p>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" onclick="window.print()">🖨️ Print / PDF</button>
+        <button class="btn" onclick="peReset()">↺ Reset</button>
+      </div>
+
+      <!-- STEP 1: Presentation -->
+      <div class="card">
+        <h2>🩺 Step 1 — Clinical Presentation</h2>
+        <div class="field" style="max-width:480px">
+          <label for="pe-symptoms">Is the patient symptomatic from this PE?</label>
+          <select id="pe-symptoms" onchange="peCalc()">
+            <option value="">— Select —</option>
+            <option value="no">No — Asymptomatic / Incidentally detected (e.g., cancer staging CT)</option>
+            <option value="yes">Yes — Symptomatic (dyspnoea, chest pain, syncope, haemoptysis, etc.)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- STEP 2: Hemodynamics -->
+      <div class="card" id="pe-card-hemo">
+        <h2>❤️ Step 2 — Hemodynamic Status <span style="font-size:12px;font-weight:400;color:var(--muted)">(most important determinant of Category D/E)</span></h2>
+        <div class="field" style="max-width:600px">
+          <label for="pe-hemo">Current hemodynamic status</label>
+          <select id="pe-hemo" onchange="peCalc()">
+            <option value="">— Select —</option>
+            <option value="stable">Hemodynamically stable — SBP ≥ 90 mmHg, no vasopressors, no shock</option>
+            <option value="transient">Incipient failure — Transient hypotension (SBP &lt;90 &lt;15 min), near-syncope, or hemodynamic instability without persistent hypotension</option>
+            <option value="persistent">Established failure — Persistent SBP &lt;90 mmHg (≥15 min) OR vasopressors required to maintain SBP ≥90</option>
+            <option value="arrest">Cardiac arrest — PEA, VF/VT, or asystole requiring CPR</option>
+          </select>
+        </div>
+        <div class="note">Category D = incipient failure; Category E = established cardiopulmonary failure or cardiac arrest.</div>
+      </div>
+
+      <!-- STEP 3: sPESI -->
+      <div class="card" id="pe-card-spesi">
+        <h2>📊 Step 3 — Simplified PESI Score (sPESI) <span id="pe-spesi-badge" class="badge zero" style="margin-left:8px">0 pts</span></h2>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 14px 0">Each criterion = 1 point. sPESI = 0 → low severity; sPESI ≥ 1 → elevated severity.</p>
+        <div class="row">
+          <label class="pe-check-field">
+            <input type="checkbox" id="pe-age80" onchange="peCalc()">
+            <span class="pe-check-label">Age &gt; 80 years</span>
+            <span class="pe-check-pts">+1</span>
+          </label>
+          <label class="pe-check-field">
+            <input type="checkbox" id="pe-cancer" onchange="peCalc()">
+            <span class="pe-check-label">Active cancer (any type, active treatment)</span>
+            <span class="pe-check-pts">+1</span>
+          </label>
+          <label class="pe-check-field">
+            <input type="checkbox" id="pe-cardiopulm" onchange="peCalc()">
+            <span class="pe-check-label">Chronic cardiopulmonary disease (heart failure or chronic lung disease)</span>
+            <span class="pe-check-pts">+1</span>
+          </label>
+          <label class="pe-check-field">
+            <input type="checkbox" id="pe-hr110" onchange="peCalc()">
+            <span class="pe-check-label">Heart rate ≥ 110 bpm</span>
+            <span class="pe-check-pts">+1</span>
+          </label>
+          <label class="pe-check-field">
+            <input type="checkbox" id="pe-sbp100" onchange="peCalc()">
+            <span class="pe-check-label">Systolic BP &lt; 100 mmHg</span>
+            <span class="pe-check-pts">+1</span>
+          </label>
+          <label class="pe-check-field">
+            <input type="checkbox" id="pe-spo2" onchange="peCalc()">
+            <span class="pe-check-label">O₂ saturation &lt; 90% (room air or supplemental O₂)</span>
+            <span class="pe-check-pts">+1</span>
+          </label>
+        </div>
+        <div class="note" style="margin-top:12px">sPESI = 0 is one criterion for Category B (outpatient eligibility). sPESI ≥ 1 → Category C minimum if hemodynamically stable.</div>
+      </div>
+
+      <!-- STEP 4: Biomarkers -->
+      <div class="card" id="pe-card-bio">
+        <h2>🧪 Step 4 — Biomarkers</h2>
+        <div class="row">
+          <div class="field">
+            <label for="pe-troponin">Troponin I or T</label>
+            <select id="pe-troponin" onchange="peCalc()">
+              <option value="unknown">Not measured / Unknown</option>
+              <option value="normal">Normal (below institutional ULN)</option>
+              <option value="elevated">Elevated (above institutional ULN)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pe-bnp">BNP or NT-proBNP</label>
+            <select id="pe-bnp" onchange="peCalc()">
+              <option value="unknown">Not measured / Unknown</option>
+              <option value="normal">Normal (BNP &lt;100 pg/mL or NT-proBNP &lt;500 pg/mL)</option>
+              <option value="elevated">Elevated (BNP ≥100 pg/mL or NT-proBNP ≥500 pg/mL)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pe-lactate">Lactate</label>
+            <select id="pe-lactate" onchange="peCalc()">
+              <option value="unknown">Not measured / Unknown</option>
+              <option value="normal">Normal (&lt;2 mmol/L)</option>
+              <option value="elevated">Elevated (≥2 mmol/L)</option>
+            </select>
+          </div>
+        </div>
+        <div class="note">Elevated biomarkers without RV dysfunction or hemodynamic compromise → Category C. Lactate elevation may signal Category D/E even if SBP appears preserved.</div>
+      </div>
+
+      <!-- STEP 5: RV Assessment -->
+      <div class="card" id="pe-card-rv">
+        <h2>🔬 Step 5 — Right Ventricular Assessment</h2>
+        <div class="row">
+          <div class="field">
+            <label for="pe-echo">Echocardiography (TTE or TEE)</label>
+            <select id="pe-echo" onchange="peCalc()">
+              <option value="unknown">Not obtained / Unknown</option>
+              <option value="normal">Normal — No RV dilation, RV:LV ratio &lt;1.0, normal function</option>
+              <option value="mild">Mild RV strain — RV:LV ratio ≥1.0 OR reduced TAPSE OR septal flattening</option>
+              <option value="severe">Severe RV dysfunction — RV:LV ≫1.0, McConnell sign, severe septal bowing, TAPSE &lt;16 mm</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pe-ctpa">CTPA — RV:LV Diameter Ratio</label>
+            <select id="pe-ctpa" onchange="peCalc()">
+              <option value="unknown">Not assessed / Unknown</option>
+              <option value="normal">Normal — RV:LV &lt;0.9</option>
+              <option value="abnormal">Abnormal — RV:LV ≥ 0.9 (RV dilation)</option>
+            </select>
+          </div>
+        </div>
+        <div class="note">RV dysfunction on imaging is a key criterion separating Category C1 (no RV dysfunction) from Category C2 (with RV dysfunction). Significant RV dysfunction combined with biomarker elevation increases urgency of PERT consultation.</div>
+      </div>
+
+      <!-- STEP 6: Outpatient eligibility (Hestia) -->
+      <div class="card" id="pe-card-hestia">
+        <h2>🏠 Step 6 — Outpatient Eligibility (Hestia Criteria)</h2>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 12px 0">Any of the following = NOT suitable for outpatient management (relevant for Categories A and B). Check all that apply:</p>
+        <div class="row">
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-bleed" onchange="peCalc()">
+            <span class="pe-check-label">Active bleeding or high bleeding risk (anticoagulation contraindicated)</span>
+          </label>
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-o2" onchange="peCalc()">
+            <span class="pe-check-label">Supplemental O₂ required &gt;24h to maintain SpO₂ &gt;90%</span>
+          </label>
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-pain" onchange="peCalc()">
+            <span class="pe-check-label">Severe pain requiring IV opioids &gt;24h</span>
+          </label>
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-renal" onchange="peCalc()">
+            <span class="pe-check-label">CrCl &lt;30 mL/min (severe renal impairment)</span>
+          </label>
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-preg" onchange="peCalc()">
+            <span class="pe-check-label">Pregnancy or breastfeeding</span>
+          </label>
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-social" onchange="peCalc()">
+            <span class="pe-check-label">Medical or social reason for hospitalization (unreliable follow-up, no DOAC access)</span>
+          </label>
+          <label class="pe-check-field pe-check-hestia">
+            <input type="checkbox" id="hestia-apla" onchange="peCalc()">
+            <span class="pe-check-label">Known antiphospholipid antibody syndrome (warfarin preferred over DOAC)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- RESULT -->
+      <div class="card" id="pe-result-card" style="display:none">
+        <div id="pe-result-inner"></div>
+      </div>
+
+      <!-- Reference table -->
+      <div class="card">
+        <h2>📖 Category Summary Reference</h2>
+        <table class="ref-table">
+          <thead>
+            <tr><th>Category</th><th>Label</th><th>Key Criteria</th><th>Disposition</th><th>Advanced Therapies</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong style="color:#16a34a">A</strong></td><td>Asymptomatic</td><td>Incidentally detected, no symptoms</td><td>ED discharge</td><td>Not indicated</td></tr>
+            <tr><td><strong style="color:#0891b2">B</strong></td><td>Low severity</td><td>Symptomatic, sPESI=0, no biomarkers↑, no RV dysfunction, hemostable</td><td>Early discharge</td><td>Not indicated</td></tr>
+            <tr><td><strong style="color:#d97706">C</strong></td><td>Elevated severity</td><td>sPESI≥1 and/or biomarkers↑ and/or RV dysfunction, hemostable</td><td>Hospitalize</td><td>Not routinely; only if progression + PERT</td></tr>
+            <tr><td><strong style="color:#ea580c">D</strong></td><td>Incipient failure</td><td>Transient hypotension, near-syncope, hemodynamic instability (not persistent)</td><td>Hospital (ICU)</td><td>Consider CDT, MT, thrombolysis (Class 2b)</td></tr>
+            <tr><td><strong style="color:#dc2626">E</strong></td><td>Established failure</td><td>Persistent SBP&lt;90, vasopressors, or cardiac arrest</td><td>ICU / Resus</td><td>Systemic thrombolysis, CDT, MT, embolectomy (Class 2a); VA-ECMO if refractory</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer">
+        <p><strong>Reference:</strong> Creager MA, Barnes GD, Giri J, et al. 2026 AHA/ACC/ACCP/ACEP/CHEST/SCAI/SHM/SIR/SVM/SVN Guideline for the Evaluation and Management of Acute Pulmonary Embolism in Adults. <em>Circulation.</em> 2026;153(12):e977–e1051. doi:10.1161/CIR.0000000000001415</p>
+        <p style="font-size:11px;margin-top:8px;">Clinical decision support only. Classification should be integrated with full clinical assessment and multidisciplinary (PERT) input. Confirm against current institutional protocols.</p>
+      </div>
+    </div>
+    <!-- END PE PAGE -->
+
+  </main>
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT
+     ================================================================ -->
+<script>
+// ----------------------------------------------------------------
+// NAVIGATION
+// ----------------------------------------------------------------
+function showPage(id, navEl) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (navEl) navEl.classList.add('active');
+}
+
+// ----------------------------------------------------------------
+// HFA-PEFF CALCULATOR
+// ----------------------------------------------------------------
+function peffFunctionalFields() {
+  return [
+    { id:'peff-septal',  label:"Septal e' (cm/s)",       options:[{v:'none',t:'— Select —'},{v:'none',t:'≥ 7 cm/s — not met'},{v:'major',t:"< 7 cm/s — MAJOR"}] },
+    { id:'peff-lateral', label:"Lateral e' (cm/s)",       options:[{v:'none',t:'— Select —'},{v:'none',t:'≥ 10 cm/s — not met'},{v:'major',t:"< 10 cm/s — MAJOR"}] },
+    { id:'peff-ee',      label:"Average E/e'",             options:[{v:'none',t:'— Select —'},{v:'none',t:'< 9 — not met'},{v:'minor',t:'9–14 — MINOR'},{v:'major',t:"≥ 15 — MAJOR"}] },
+    { id:'peff-trv',     label:"TR velocity (m/s) / PASP", options:[{v:'none',t:'— Select —'},{v:'none',t:'≤ 2.8 m/s (PASP ≤ 35) — not met'},{v:'major',t:"> 2.8 m/s (PASP > 35) — MAJOR"}] },
+    { id:'peff-gls',     label:"GLS (absolute value)",     options:[{v:'none',t:'— Select —'},{v:'none',t:'≥ 16% — not met'},{v:'minor',t:"< 16% — MINOR"}] }
+  ];
+}
+function peffMorphFields(sex) {
+  const majCut = sex==='M'?149:122, minCut = sex==='M'?115:95;
+  return [
+    { id:'peff-lavi', label:"LAVI (ml/m²)", options:[{v:'none',t:'— Select —'},{v:'none',t:'< 29 — not met'},{v:'minor',t:'29–34 — MINOR'},{v:'major',t:'> 34 — MAJOR'}] },
+    { id:'peff-lvmi', label:`LVMI + RWT (${sex==='M'?'Male':'Female'})`, options:[{v:'none',t:'— Select —'},{v:'none',t:`LVMI ≤ ${minCut} g/m² — not met`},{v:'minor',t:`LVMI > ${minCut} g/m² OR RWT > 0.42 — MINOR`},{v:'major',t:`LVMI ≥ ${majCut} g/m² AND RWT > 0.42 — MAJOR`}] },
+    { id:'peff-lvwt', label:"LV wall thickness (mm)", options:[{v:'none',t:'— Select —'},{v:'none',t:'< 12 mm — not met'},{v:'minor',t:"≥ 12 mm — MINOR"}] }
+  ];
+}
+function peffBioFields(rhythm) {
+  let nm,nlo,nhi,bm,blo,bhi;
+  if (rhythm==='SR'){nm=220;nlo=125;nhi=220;bm=80;blo=35;bhi=80;}
+  else              {nm=660;nlo=365;nhi=660;bm=240;blo=105;bhi=240;}
+  const rl=rhythm==='SR'?'Sinus Rhythm':'Atrial Fibrillation';
+  return [{id:'peff-bio',label:`Natriuretic Peptide — ${rl}`,options:[
+    {v:'none',t:'— Select / Not measured —'},
+    {v:'none',t:`NT-proBNP < ${nlo} or BNP < ${blo} — not met`},
+    {v:'minor',t:`NT-proBNP ${nlo}–${nhi} or BNP ${blo}–${bhi} — MINOR`},
+    {v:'major',t:`NT-proBNP > ${nm} or BNP > ${bm} — MAJOR`}
+  ]}];
+}
+function peffBuildField(f) {
+  const wrap=document.createElement('div'); wrap.className='field'; wrap.id='peff-field-'+f.id;
+  const label=document.createElement('label'); label.textContent=f.label; label.setAttribute('for',f.id); wrap.appendChild(label);
+  const sel=document.createElement('select'); sel.id=f.id; sel.addEventListener('change',peffRecalc);
+  f.options.forEach(opt=>{const o=document.createElement('option');o.value=opt.v;o.textContent=opt.t;sel.appendChild(o);});
+  wrap.appendChild(sel); return wrap;
+}
+function peffRenderRow(rowId,fields) {
+  const row=document.getElementById(rowId);
+  const existing={}; row.querySelectorAll('select').forEach(s=>existing[s.id]=s.value);
+  row.innerHTML='';
+  fields.forEach(f=>{
+    const el=peffBuildField(f); row.appendChild(el);
+    if(existing[f.id]){const sel=el.querySelector('select');if([...sel.options].some(o=>o.value===existing[f.id]))sel.value=existing[f.id];}
+  });
+}
+function peffRebuild(){
+  peffRenderRow('peff-row-func',peffFunctionalFields());
+  peffRenderRow('peff-row-morph',peffMorphFields(document.getElementById('peff-sex').value));
+  peffRenderRow('peff-row-bio',peffBioFields(document.getElementById('peff-rhythm').value));
+  peffRecalc();
+}
+function peffSetBadge(id,pts){
+  const el=document.getElementById(id);
+  el.className='badge '+(pts===2?'major':pts===1?'minor':'zero');
+  el.textContent=pts+' pt'+(pts===1?'':'s');
+}
+function peffColorField(sel){
+  const wrap=sel.closest('.field'); wrap.classList.remove('set-major','set-minor');
+  if(sel.value==='major')wrap.classList.add('set-major');
+  else if(sel.value==='minor')wrap.classList.add('set-minor');
+}
+function peffDomainScore(rowId){
+  let hasMajor=false,hasMinor=false;
+  document.querySelectorAll('#'+rowId+' select').forEach(s=>{
+    peffColorField(s);
+    if(s.value==='major')hasMajor=true;
+    else if(s.value==='minor')hasMinor=true;
+  });
+  return hasMajor?2:(hasMinor?1:0);
+}
+function peffRecalc(){
+  const f=peffDomainScore('peff-row-func'),m=peffDomainScore('peff-row-morph'),b=peffDomainScore('peff-row-bio');
+  peffSetBadge('peff-badge-func',f);peffSetBadge('peff-badge-morph',m);peffSetBadge('peff-badge-bio',b);
+  document.getElementById('peff-sc-func').textContent=f;
+  document.getElementById('peff-sc-morph').textContent=m;
+  document.getElementById('peff-sc-bio').textContent=b;
+  document.getElementById('peff-sc-domains').textContent=[f,m,b].filter(p=>p>0).length+'/3';
+  const total=f+m+b; document.getElementById('peff-total').textContent=total;
+  const interp=document.getElementById('peff-interp');
+  if(total>=5){interp.className='interp high';interp.innerHTML='<strong>Score ≥ 5 — HFpEF confirmed</strong>Supports diagnosis of heart failure with preserved ejection fraction.';}
+  else if(total>=2){interp.className='interp mid';interp.innerHTML='<strong>Score 2–4 — Intermediate</strong>Proceed to functional testing: diastolic stress test or right heart catheterisation with exercise.';}
+  else{interp.className='interp low';interp.innerHTML="<strong>Score 0–1 — HFpEF unlikely</strong>Consider alternative diagnoses.";}
+}
+function peffResetAll(){
+  document.getElementById('peff-sex').value='M';
+  document.getElementById('peff-rhythm').value='SR';
+  peffRebuild();
+  document.querySelectorAll('#page-hfapeff .row select').forEach(s=>{s.selectedIndex=0;});
+  document.querySelectorAll('#page-hfapeff .field').forEach(f=>f.classList.remove('ocr-filled'));
+  peffRecalc();
+}
+peffRebuild();
+
+// ----------------------------------------------------------------
+// ROTEM CALCULATOR
+// ----------------------------------------------------------------
+function rVal(id){const v=parseFloat(document.getElementById(id).value);return isNaN(v)?null:v;}
+function rotemColorField(fId,val,lo,hi){
+  const w=document.getElementById(fId); if(!w)return;
+  if(val===null){w.classList.remove('set-abnormal','set-normal');return;}
+  w.classList.toggle('set-abnormal',val<lo||val>hi);
+  w.classList.toggle('set-normal',!(val<lo||val>hi));
+}
+function rotemCalc(){
+  const ex={ct:rVal('extem-ct'),cft:rVal('extem-cft'),alpha:rVal('extem-alpha'),mcf:rVal('extem-mcf'),li30:rVal('extem-li30'),li60:rVal('extem-li60')};
+  const intem={ct:rVal('intem-ct'),cft:rVal('intem-cft'),alpha:rVal('intem-alpha'),mcf:rVal('intem-mcf')};
+  const fib={mcf:rVal('fibtem-mcf'),a5:rVal('fibtem-a5')};
+  const apt={mcf:rVal('aptem-mcf'),li30:rVal('aptem-li30')};
+
+  rotemColorField('field-extem-ct',ex.ct,38,79); rotemColorField('field-extem-cft',ex.cft,34,159);
+  rotemColorField('field-extem-alpha',ex.alpha,63,83); rotemColorField('field-extem-mcf',ex.mcf,50,72);
+  rotemColorField('field-extem-li30',ex.li30,85,100); rotemColorField('field-extem-li60',ex.li60,85,100);
+  rotemColorField('field-intem-ct',intem.ct,100,240); rotemColorField('field-intem-cft',intem.cft,30,110);
+  rotemColorField('field-intem-alpha',intem.alpha,70,83); rotemColorField('field-intem-mcf',intem.mcf,50,72);
+  rotemColorField('field-fibtem-mcf',fib.mcf,9,25); rotemColorField('field-fibtem-a5',fib.a5,7,999);
+  rotemColorField('field-aptem-li30',apt.li30,85,100);
+
+  const hasAny=Object.values(ex).some(v=>v!==null)||Object.values(intem).some(v=>v!==null)||Object.values(fib).some(v=>v!==null)||Object.values(apt).some(v=>v!==null);
+  if(!hasAny){
+    document.getElementById('rotem-results').innerHTML='<div class="interp info"><strong>Enter values above to generate interpretation</strong>Enter one or more ROTEM parameters.</div>';
+    document.getElementById('platelet-contrib').className='interp info';
+    document.getElementById('platelet-contrib').innerHTML='<strong>—</strong>Enter EXTEM MCF and FIBTEM MCF to estimate.';
+    return;
+  }
+  const findings=[];
+  if(ex.li30!==null&&ex.li30<85){findings.push({level:'critical',icon:'🚨',title:`Hyperfibrinolysis (EXTEM LI30 = ${ex.li30}%)`,text:'Ref ≥ 85%. Immediate tranexamic acid indicated if not already given.'});}
+  else if(ex.li60!==null&&ex.li60<85){findings.push({level:'critical',icon:'🚨',title:`Fibrinolysis (EXTEM LI60 = ${ex.li60}%)`,text:'Consider tranexamic acid. Confirm with APTEM.'});}
+  if(ex.mcf!==null&&apt.mcf!==null){const diff=apt.mcf-ex.mcf;if(diff>=8)findings.push({level:'critical',icon:'🚨',title:`Fibrinolysis confirmed (APTEM−EXTEM MCF = +${diff} mm)`,text:'Hyperfibrinolysis confirmed — tranexamic acid indicated.'});}
+  if(apt.li30!==null&&apt.li30<85)findings.push({level:'critical',icon:'🚨',title:`APTEM LI30 low (${apt.li30}%)`,text:'Persistent fibrinolysis despite inhibitor.'});
+  if(ex.ct!==null&&ex.ct>79){const sev=ex.ct>120?'critical':'warning';findings.push({level:sev,icon:'⚠️',title:`EXTEM CT prolonged (${ex.ct} s)`,text:`Ref 38–79 s. Extrinsic/common pathway defect. Consider FFP (10–15 ml/kg) or PCC. Correlate with INR/PT.`});}
+  if(intem.ct!==null&&intem.ct>240){
+    let note='';
+    if(ex.ct!==null&&ex.ct<=79)note=' EXTEM CT normal — consider heparin effect. Check HEPTEM; if corrected, give protamine.';
+    findings.push({level:intem.ct>360?'critical':'warning',icon:'⚠️',title:`INTEM CT prolonged (${intem.ct} s)`,text:`Ref 100–240 s. Intrinsic pathway deficiency or heparin.${note}`});
+  }
+  if(fib.mcf!==null&&fib.mcf<9){findings.push({level:fib.mcf<6?'critical':'warning',icon:fib.mcf<6?'🚨':'⚠️',title:`FIBTEM MCF low (${fib.mcf} mm)`,text:'Ref 9–25 mm. Fibrinogen deficiency — give fibrinogen concentrate (target MCF >12 mm, fibrinogen >2 g/L) or cryoprecipitate.'});}
+  else if(fib.a5!==null&&fib.a5<7)findings.push({level:'warning',icon:'⚠️',title:`FIBTEM A5 low (${fib.a5} mm)`,text:'Ref ≥ 7 mm. Early fibrinogen deficiency — monitor and consider pre-emptive replacement.'});
+  if(ex.cft!==null&&ex.cft>159)findings.push({level:'warning',icon:'⚠️',title:`EXTEM CFT prolonged (${ex.cft} s)`,text:'Ref 34–159 s. Slow clot formation. If FIBTEM MCF low → fibrinogen; if normal → platelet dysfunction.'});
+  if(ex.alpha!==null&&ex.alpha<63)findings.push({level:'warning',icon:'⚠️',title:`EXTEM Alpha reduced (${ex.alpha}°)`,text:'Ref 63–83°. Reduced clot formation rate. Correlate with FIBTEM MCF.'});
+  if(ex.mcf!==null&&ex.mcf<50){
+    let cause=fib.mcf!==null?(ex.mcf-fib.mcf<15?` FIBTEM ${fib.mcf} mm — fibrinogen dominant. Prioritise fibrinogen.`:` FIBTEM ${fib.mcf} mm — platelets also low. Consider platelets + fibrinogen.`):'Get FIBTEM MCF to differentiate.';
+    findings.push({level:ex.mcf<40?'critical':'warning',icon:ex.mcf<40?'🚨':'⚠️',title:`EXTEM MCF reduced (${ex.mcf} mm)`,text:`Ref 50–72 mm.${cause}`});
+  }
+  if(intem.mcf!==null&&intem.mcf<50)findings.push({level:'warning',icon:'⚠️',title:`INTEM MCF reduced (${intem.mcf} mm)`,text:'Ref 50–72 mm. Compare to EXTEM recommendations.'});
+  if(findings.length===0)findings.push({level:'normal',icon:'✅',title:'All values within reference range',text:'No abnormalities detected. Continue monitoring if clinical bleeding ongoing.'});
+
+  document.getElementById('rotem-results').innerHTML='<div class="reco-list">'+findings.map(f=>`<div class="reco-item ${f.level}"><div class="reco-icon">${f.icon}</div><div class="reco-text"><strong>${f.title}</strong>${f.text}</div></div>`).join('')+'</div>';
+
+  const pc=document.getElementById('platelet-contrib');
+  if(ex.mcf!==null&&fib.mcf!==null){
+    const diff=ex.mcf-fib.mcf;
+    if(diff>=15){pc.className='interp mid';pc.innerHTML=`<strong>Platelet contribution ≈ ${diff} mm</strong>Difference ≥ 15 mm — platelets contributing substantially. Consider platelet transfusion alongside fibrinogen.`;}
+    else{pc.className='interp high';pc.innerHTML=`<strong>Platelet contribution ≈ ${diff} mm</strong>Difference &lt; 15 mm — fibrinogen dominant. Prioritise fibrinogen over platelets.`;}
+  } else {
+    pc.className='interp info'; pc.innerHTML='<strong>—</strong>Enter EXTEM MCF and FIBTEM MCF to estimate.';
+  }
+}
+// ----------------------------------------------------------------
+// PE CATEGORY CALCULATOR (2026 AHA/ACC Guideline)
+// ----------------------------------------------------------------
+function peSpesi() {
+  return ['pe-age80','pe-cancer','pe-cardiopulm','pe-hr110','pe-sbp100','pe-spo2']
+    .filter(id => document.getElementById(id).checked).length;
+}
+function peHestiaPositive() {
+  return ['hestia-bleed','hestia-o2','hestia-pain','hestia-renal','hestia-preg','hestia-social','hestia-apla']
+    .some(id => document.getElementById(id).checked);
+}
+function peHestiaList() {
+  const labels = {
+    'hestia-bleed':'Bleeding risk / anticoagulation concern',
+    'hestia-o2':'O₂ requirement >24h',
+    'hestia-pain':'Severe pain requiring IV opioids',
+    'hestia-renal':'Severe renal impairment (CrCl <30)',
+    'hestia-preg':'Pregnancy / breastfeeding',
+    'hestia-social':'Social / medical reason for admission',
+    'hestia-apla':'Antiphospholipid syndrome (warfarin preferred)'
+  };
+  return Object.entries(labels)
+    .filter(([id]) => document.getElementById(id).checked)
+    .map(([,l]) => l);
+}
+
+function peCalc() {
+  // Update sPESI badge
+  const spesi = peSpesi();
+  const badge = document.getElementById('pe-spesi-badge');
+  badge.textContent = spesi + ' pt' + (spesi === 1 ? '' : 's');
+  badge.className = 'badge ' + (spesi === 0 ? 'zero' : spesi <= 2 ? 'minor' : 'major');
+
+  // Update checkbox styling
+  ['pe-age80','pe-cancer','pe-cardiopulm','pe-hr110','pe-sbp100','pe-spo2'].forEach(id => {
+    const cb = document.getElementById(id);
+    cb.closest('label').classList.toggle('checked', cb.checked);
+  });
+  ['hestia-bleed','hestia-o2','hestia-pain','hestia-renal','hestia-preg','hestia-social','hestia-apla'].forEach(id => {
+    const cb = document.getElementById(id);
+    cb.closest('label').classList.toggle('checked', cb.checked);
+  });
+
+  const symptoms = document.getElementById('pe-symptoms').value;
+  if (!symptoms) { document.getElementById('pe-result-card').style.display = 'none'; return; }
+
+  const hemo   = document.getElementById('pe-hemo').value;
+  const troponin = document.getElementById('pe-troponin').value;
+  const bnp    = document.getElementById('pe-bnp').value;
+  const lactate = document.getElementById('pe-lactate').value;
+  const echo   = document.getElementById('pe-echo').value;
+  const ctpa   = document.getElementById('pe-ctpa').value;
+
+  const biomarkersElevated = troponin === 'elevated' || bnp === 'elevated' || lactate === 'elevated';
+  const rvDysfunction = echo === 'mild' || echo === 'severe' || ctpa === 'abnormal';
+  const severeRV = echo === 'severe';
+  const hestia = peHestiaPositive();
+  const hestiaList = peHestiaList();
+
+  // Determine category
+  let cat, catClass, catName, catSubtitle;
+
+  if (symptoms === 'no') {
+    cat = 'A';
+  } else if (hemo === 'arrest') {
+    cat = 'E'; // E1 - most severe
+  } else if (hemo === 'persistent') {
+    cat = 'E';
+  } else if (hemo === 'transient') {
+    cat = 'D';
+  } else {
+    // Hemodynamically stable — B or C
+    if (spesi === 0 && !biomarkersElevated && !rvDysfunction) {
+      cat = 'B';
+    } else {
+      cat = 'C';
+    }
+  }
+
+  const catInfo = {
+    A: { cls:'pe-cat-A', name:'Category A — Subclinical / Asymptomatic PE', subtitle:'Incidentally detected PE without symptoms' },
+    B: { cls:'pe-cat-B', name:'Category B — Symptomatic, Low Clinical Severity', subtitle:'sPESI = 0, no elevated biomarkers, no RV dysfunction, hemodynamically stable' },
+    C: { cls:'pe-cat-C', name:'Category C — Elevated Clinical Severity ± RV Dysfunction', subtitle:'sPESI ≥1 or elevated biomarkers or RV dysfunction; hemodynamically stable' },
+    D: { cls:'pe-cat-D', name:'Category D — Incipient Cardiopulmonary Failure', subtitle:'Transient hypotension, near-syncope, or hemodynamic instability without persistent SBP <90' },
+    E: { cls:'pe-cat-E', name:'Category E — Established Cardiopulmonary Failure', subtitle:'Persistent SBP <90 mmHg, vasopressor requirement, or cardiac arrest' }
+  };
+
+  // Build recommendations
+  const reco = buildPeReco(cat, spesi, biomarkersElevated, rvDysfunction, severeRV, hemo, hestia, hestiaList, troponin, bnp, lactate, echo, ctpa, symptoms);
+
+  document.getElementById('pe-result-card').style.display = 'block';
+  document.getElementById('pe-result-inner').innerHTML = `
+    <div class="pe-cat-banner ${catInfo[cat].cls}">
+      <div class="pe-cat-letter">${cat}</div>
+      <div class="pe-cat-info">
+        <p class="pe-cat-title">${catInfo[cat].name}</p>
+        <p class="pe-cat-subtitle">${catInfo[cat].subtitle}</p>
+      </div>
+    </div>
+    ${reco}
+  `;
+}
+
+function buildPeReco(cat, spesi, biomarkersUp, rvDx, severeRV, hemo, hestia, hestiaList, troponin, bnp, lactate, echo, ctpa, symptoms) {
+  const aph = hestia ? `<div class="pe-alert warning">⚠️ <span><strong>Hestia criteria present:</strong> ${hestiaList.join('; ')} — outpatient management NOT suitable despite low clinical severity.</span></div>` : '';
+  let html = '';
+
+  if (cat === 'A') {
+    html = `
+      <div class="pe-reco-grid">
+        <div class="pe-reco-box"><h4>Disposition</h4><p>ED discharge without hospitalization is safe and appropriate (Class 1). Ensure anticoagulation prescription and structured follow-up before leaving.</p></div>
+        <div class="pe-reco-box"><h4>Anticoagulation</h4><p>Initiate DOAC (rivaroxaban or apixaban preferred). LMWH or UFH if DOAC contraindicated. No parenteral therapy required.</p></div>
+        <div class="pe-reco-box"><h4>Follow-up</h4><p>Within 1 week of discharge (phone or clinic). Formal visit at ≤3 months to assess anticoagulation duration. Screen for CTEPD at each visit for ≥1 year.</p></div>
+        <div class="pe-reco-box"><h4>Advanced Therapies</h4><p>Not indicated. No systemic thrombolysis, CDT, MT, or surgical embolectomy.</p></div>
+      </div>
+      ${aph}
+      <div class="pe-alert green">✅ <span><strong>PERT not required</strong> for asymptomatic Category A PE in most cases. Consider PERT consultation if complex comorbidities or patient factors exist.</span></div>
+    `;
+  } else if (cat === 'B') {
+    const outpatient = hestia
+      ? `<p>⚠️ Despite low clinical severity, <strong>Hestia criteria are present</strong> — inpatient admission recommended.</p>`
+      : `<p>Early discharge / outpatient management is appropriate provided: immediate anticoagulation access, reliable follow-up within 1 week, patient able to consent and self-manage.</p>`;
+    html = `
+      <div class="pe-reco-grid">
+        <div class="pe-reco-box"><h4>Disposition</h4>${outpatient}</div>
+        <div class="pe-reco-box"><h4>Anticoagulation</h4><p>DOAC strongly preferred (Class 1): rivaroxaban 15 mg BID × 3 weeks then 20 mg daily, or apixaban 10 mg BID × 7 days then 5 mg BID. LMWH for pregnancy (DOAC contraindicated).</p></div>
+        <div class="pe-reco-box"><h4>Follow-up</h4><p>Within 1 week of discharge. Clinic visit ≤3 months. Discuss extended anticoagulation (if no major reversible risk factor, extended phase recommended). CTEPD screen ≥1 year.</p></div>
+        <div class="pe-reco-box"><h4>Advanced Therapies</h4><p>Not indicated (Class 3 — Harm). No CDT, MT, or surgical embolectomy.</p></div>
+      </div>
+      <div class="pe-alert info">ℹ️ <span>PERT not routinely required for Category B. Biomarker and RV assessment can assist in confirming low-risk status if clinical uncertainty exists.</span></div>
+    `;
+  } else if (cat === 'C') {
+    const subcategory = (!biomarkersUp && !rvDx) ? 'C1 (elevated sPESI only, no biomarker or RV abnormalities)' :
+                        (biomarkersUp && !rvDx)  ? 'C2 (elevated biomarkers, no RV dysfunction on imaging)' :
+                        (biomarkersUp && rvDx && !severeRV) ? 'C2 (elevated biomarkers + mild RV dysfunction)' :
+                        'C2 (elevated biomarkers + significant RV dysfunction — higher PERT priority)';
+    html = `
+      <div class="pe-alert warning">⚠️ <span><strong>Subcategory: ${subcategory}</strong></span></div>
+      <div class="pe-reco-grid">
+        <div class="pe-reco-box"><h4>Disposition</h4><p>Hospitalization required. Inpatient monitoring for clinical deterioration — especially transition from C → D/E (RV failure progression). Monitor hemodynamics closely.</p></div>
+        <div class="pe-reco-box"><h4>Anticoagulation</h4><p>LMWH preferred over UFH for initial parenteral therapy (Class 1). Transition to DOAC for oral therapy (Class 1) unless contraindicated. Avoid VKA unless APLA or other specific indication.</p></div>
+        <div class="pe-reco-box pe-reco-box pert"><h4>🔵 PERT</h4><p>PERT consultation recommended (Class 1) to guide monitoring, risk re-stratification, and decision-making regarding advanced therapies if condition deteriorates.</p></div>
+        <div class="pe-reco-box"><h4>Advanced Therapies</h4><p><strong>Not routinely recommended</strong> for hemodynamically stable Category C. Advanced therapies (CDT, MT, thrombolysis) may be considered ONLY if clinical deterioration occurs AND after PERT multidisciplinary deliberation.</p></div>
+      </div>
+      <div class="pe-alert info">ℹ️ <span>Serial monitoring of biomarkers, heart rate, BP, and RV function is critical. Rapid escalation pathway to Category D/E if deterioration is detected.</span></div>
+    `;
+  } else if (cat === 'D') {
+    html = `
+      <div class="pe-alert danger">🚨 <span><strong>Category D — Incipient Cardiopulmonary Failure.</strong> Immediate resuscitation and PERT activation required.</span></div>
+      <div class="pe-reco-grid">
+        <div class="pe-reco-box highlight"><h4>Disposition</h4><p>Hospital admission to ICU or monitored bed. Avoid delay in anticoagulation initiation. Prepare for potential escalation to Category E.</p></div>
+        <div class="pe-reco-box highlight"><h4>Hemodynamic Support</h4><p>Vasopressors (norepinephrine preferred) if MAP compromised. Judicious fluid resuscitation (avoid RV volume overload). Inotropic support if RV failure present.</p></div>
+        <div class="pe-reco-box highlight"><h4>Anticoagulation</h4><p>LMWH recommended over UFH (Class 1). If severe renal impairment or procedure anticipated: UFH acceptable. Parenteral therapy until clinical stability confirmed.</p></div>
+        <div class="pe-reco-box pe-reco-box pert"><h4>🔵 PERT (Urgent)</h4><p>Urgent PERT activation (Class 1). Multidisciplinary team to evaluate for advanced therapy candidacy: CDT (Class 2b), mechanical thrombectomy (Class 2b), systemic thrombolysis (Class 2b) based on bleeding risk and clinical trajectory.</p></div>
+        <div class="pe-reco-box"><h4>Respiratory Support</h4><p>HFNC preferred over standard nasal cannula for moderate-to-severe hypoxia. Avoid deep sedation and mechanical ventilation if at all possible — intubation and positive-pressure ventilation risk precipitating cardiovascular collapse in RV failure.</p></div>
+        <div class="pe-reco-box"><h4>Advanced Therapies</h4><p>Consider CDT, mechanical thrombectomy, or systemic thrombolysis (Class 2b) if bleeding risk acceptable and condition deteriorating. Evaluate for surgical embolectomy at centres with expertise.</p></div>
+      </div>
+    `;
+  } else if (cat === 'E') {
+    const arrest = hemo === 'arrest';
+    html = `
+      <div class="pe-alert danger">🚨 <span><strong>Category E${arrest?' (E1 — Cardiac Arrest)':''} — Established Cardiopulmonary Failure.</strong> Immediate resuscitation, PERT activation, and advanced therapy assessment required.</span></div>
+      <div class="pe-reco-grid">
+        <div class="pe-reco-box highlight"><h4>Immediate Actions</h4><p>${arrest ? 'Continue CPR. Consider empiric systemic thrombolysis (alteplase 50–100 mg IV) during CPR if PE strongly suspected and no absolute contraindication. VA-ECMO as bridge if available.' : 'Vasopressors NOW (norepinephrine preferred). Volume-cautious resuscitation. Do NOT fluid overload — RV dilation worsens cardiac output.'}</p></div>
+        <div class="pe-reco-box highlight"><h4>Anticoagulation</h4><p>UFH preferred if systemic thrombolysis or interventional procedure planned (reversibility). Otherwise LMWH (Class 1). Hold if thrombolysis administered until aPTT <80 sec, then resume without bolus.</p></div>
+        <div class="pe-reco-box pe-reco-box pert"><h4>🔵 PERT (Emergent)</h4><p>Emergent PERT activation (Class 1). Simultaneous cardiology, pulmonology, cardiac surgery, and interventional radiology engagement. Do not delay advanced therapy for PERT — activate in parallel.</p></div>
+        <div class="pe-reco-box highlight"><h4>Systemic Thrombolysis</h4><p>Reasonable in Category E (Class 2a). Alteplase 100 mg IV over 2h (or 0.6 mg/kg over 15 min if arrest). Contraindications: recent surgery/stroke/head trauma (absolute); prior hemorrhagic stroke, active cancer bleeding (relative). Hold anticoagulation during infusion.</p></div>
+        <div class="pe-reco-box"><h4>Catheter-Based Therapy</h4><p>CDT or mechanical thrombectomy (MT) reasonable in Category E1 (Class 2a). MT preferred if thrombolysis contraindicated or bleeding risk high. Requires experienced interventional team.</p></div>
+        <div class="pe-reco-box"><h4>Surgical Embolectomy / VA-ECMO</h4><p>Surgical embolectomy: reasonable at experienced centres (Class 2a), especially if thrombolysis contraindicated or failed. VA-ECMO: reasonable bridge to recovery or definitive therapy in refractory cardiogenic shock (Class 2a).</p></div>
+        <div class="pe-reco-box"><h4>Respiratory Support</h4><p>HFNC preferred. Avoid intubation and mechanical ventilation if at all possible. If intubation unavoidable: use low tidal volume, accept permissive hypercapnia, avoid PEEP >5 cmH₂O to prevent RV afterload increase. Vasopressors ready before induction.</p></div>
+      </div>
+    `;
+  }
+
+  return html;
+}
+
+function peReset() {
+  document.getElementById('pe-symptoms').value = '';
+  document.getElementById('pe-hemo').value = '';
+  document.getElementById('pe-troponin').value = 'unknown';
+  document.getElementById('pe-bnp').value = 'unknown';
+  document.getElementById('pe-lactate').value = 'unknown';
+  document.getElementById('pe-echo').value = 'unknown';
+  document.getElementById('pe-ctpa').value = 'unknown';
+  ['pe-age80','pe-cancer','pe-cardiopulm','pe-hr110','pe-sbp100','pe-spo2',
+   'hestia-bleed','hestia-o2','hestia-pain','hestia-renal','hestia-preg','hestia-social','hestia-apla']
+    .forEach(id => {
+      document.getElementById(id).checked = false;
+      document.getElementById(id).closest('label').classList.remove('checked');
+    });
+  document.getElementById('pe-result-card').style.display = 'none';
+  const badge = document.getElementById('pe-spesi-badge');
+  badge.textContent = '0 pts'; badge.className = 'badge zero';
+}
+
+function rotemReset(){
+  ['extem-ct','extem-cft','extem-alpha','extem-mcf','extem-li30','extem-li60','intem-ct','intem-cft','intem-alpha','intem-mcf','fibtem-mcf','fibtem-a5','aptem-mcf','aptem-li30']
+    .forEach(id=>{document.getElementById(id).value='';});
+  document.querySelectorAll('#page-rotem .field').forEach(f=>f.classList.remove('ocr-filled'));
+  rotemCalc();
+}
+
+// ----------------------------------------------------------------
+// CAMERA / OCR SYSTEM
+// ----------------------------------------------------------------
+let scanCalcMode = null;  // 'rotem' | 'hfapeff'
+let cameraStream = null;
+let capturedImageData = null;
+let ocrResults = [];
+
+function openScanModal(mode) {
+  scanCalcMode = mode;
+  document.getElementById('modal-title').textContent =
+    mode === 'rotem' ? '📷 Scan ROTEM Printout' : '📷 Scan Echo Report';
+  document.getElementById('scan-modal').classList.add('open');
+  resetModalState();
+}
+
+function closeScanModal() {
+  stopCamera();
+  document.getElementById('scan-modal').classList.remove('open');
+  resetModalState();
+}
+
+function resetModalState() {
+  stopCamera();
+  capturedImageData = null;
+  ocrResults = [];
+  document.getElementById('cam-video').style.display = 'none';
+  document.getElementById('cam-canvas').style.display = 'none';
+  document.getElementById('cam-placeholder').style.display = 'flex';
+  document.getElementById('btn-open-camera').style.display = 'inline-flex';
+  document.getElementById('btn-capture').style.display = 'none';
+  document.getElementById('btn-retake').style.display = 'none';
+  document.getElementById('btn-analyze').style.display = 'none';
+  document.getElementById('btn-apply').style.display = 'none';
+  document.getElementById('ocr-status').classList.remove('visible');
+  document.getElementById('ocr-results').classList.remove('visible');
+  document.getElementById('file-input').value = '';
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  document.getElementById('cam-video').srcObject = null;
+}
+
+async function openCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    const video = document.getElementById('cam-video');
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    document.getElementById('cam-canvas').style.display = 'none';
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('btn-open-camera').style.display = 'none';
+    document.getElementById('btn-capture').style.display = 'inline-flex';
+    document.getElementById('btn-retake').style.display = 'none';
+    document.getElementById('btn-analyze').style.display = 'none';
+  } catch (err) {
+    alert('Camera access denied or unavailable. Please use "Upload Image" instead.\n\n' + err.message);
+  }
+}
+
+function capturePhoto() {
+  const video = document.getElementById('cam-video');
+  const canvas = document.getElementById('cam-canvas');
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
+  stopCamera();
+  video.style.display = 'none';
+  canvas.style.display = 'block';
+  document.getElementById('btn-capture').style.display = 'none';
+  document.getElementById('btn-retake').style.display = 'inline-flex';
+  document.getElementById('btn-analyze').style.display = 'inline-flex';
+}
+
+function retakePhoto() {
+  capturedImageData = null;
+  document.getElementById('cam-canvas').style.display = 'none';
+  document.getElementById('btn-retake').style.display = 'none';
+  document.getElementById('btn-analyze').style.display = 'none';
+  document.getElementById('btn-apply').style.display = 'none';
+  document.getElementById('ocr-results').classList.remove('visible');
+  document.getElementById('ocr-status').classList.remove('visible');
+  openCamera();
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  stopCamera();
+  const reader = new FileReader();
+  reader.onload = e => {
+    capturedImageData = e.target.result;
+    const canvas = document.getElementById('cam-canvas');
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width; canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      canvas.style.display = 'block';
+      document.getElementById('cam-video').style.display = 'none';
+      document.getElementById('cam-placeholder').style.display = 'none';
+      document.getElementById('btn-open-camera').style.display = 'inline-flex';
+      document.getElementById('btn-capture').style.display = 'none';
+      document.getElementById('btn-retake').style.display = 'inline-flex';
+      document.getElementById('btn-analyze').style.display = 'inline-flex';
+      document.getElementById('ocr-results').classList.remove('visible');
+      document.getElementById('btn-apply').style.display = 'none';
+    };
+    img.src = capturedImageData;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runOCR() {
+  if (!capturedImageData) return;
+  const statusEl = document.getElementById('ocr-status');
+  const statusText = document.getElementById('ocr-status-text');
+  statusEl.classList.add('visible');
+  document.getElementById('ocr-results').classList.remove('visible');
+  document.getElementById('btn-apply').style.display = 'none';
+  document.getElementById('btn-analyze').disabled = true;
+
+  try {
+    statusText.textContent = 'Loading OCR engine…';
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          statusText.textContent = `Recognizing text… ${Math.round(m.progress * 100)}%`;
+        } else {
+          statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+        }
+      }
+    });
+
+    statusText.textContent = 'Analyzing image…';
+    const { data: { text } } = await worker.recognize(capturedImageData);
+    await worker.terminate();
+
+    document.getElementById('ocr-raw-text').textContent = text;
+    statusEl.classList.remove('visible');
+
+    // Parse according to mode
+    if (scanCalcMode === 'rotem') {
+      ocrResults = parseROTEMText(text);
+    } else {
+      ocrResults = parseHFAPEFFText(text);
+    }
+
+    renderOCRResults(ocrResults);
+    document.getElementById('ocr-results').classList.add('visible');
+    if (ocrResults.some(r => r.found)) {
+      document.getElementById('btn-apply').style.display = 'inline-flex';
+    }
+  } catch (err) {
+    statusText.textContent = '❌ OCR failed: ' + err.message;
+  } finally {
+    document.getElementById('btn-analyze').disabled = false;
+  }
+}
+
+// ---- ROTEM OCR Parser ----
+function parseROTEMText(rawText) {
+  const t = rawText.toUpperCase().replace(/[|[\]{}]/g, ' ').replace(/\s+/g, ' ');
+
+  // Extract a numeric value near a keyword, optionally within a section
+  function extractNear(text, patterns) {
+    for (const pat of patterns) {
+      const m = text.match(pat);
+      if (m) {
+        const v = parseFloat(m[1]);
+        if (!isNaN(v)) return v;
+      }
+    }
+    return null;
+  }
+
+  // Try to find section boundaries
+  function getSection(text, name) {
+    const idx = text.indexOf(name);
+    if (idx === -1) return text; // fallback: search whole text
+    const nextSection = text.search(new RegExp('(?:EXTEM|INTEM|FIBTEM|APTEM|HEPTEM)', 'g'));
+    // Get 400 chars after the section header
+    return text.substring(idx, idx + 400);
+  }
+
+  const exSec  = getSection(t, 'EXTEM')  || t;
+  const inSec  = getSection(t, 'INTEM')  || t;
+  const fibSec = getSection(t, 'FIBTEM') || t;
+  const aptSec = getSection(t, 'APTEM')  || t;
+
+  const fields = [
+    { id:'extem-ct',    label:'EXTEM CT',       unit:'s',
+      val: extractNear(exSec,  [/CT\s*[:\s=]+(\d+(?:\.\d+)?)/,/\bCT\b[^\d]*(\d+)/]) },
+    { id:'extem-cft',   label:'EXTEM CFT',      unit:'s',
+      val: extractNear(exSec,  [/CFT\s*[:\s=]+(\d+(?:\.\d+)?)/,/\bCFT\b[^\d]*(\d+)/]) },
+    { id:'extem-alpha', label:'EXTEM Alpha',     unit:'°',
+      val: extractNear(exSec,  [/ALPHA\s*[:\s=]+(\d+(?:\.\d+)?)/,/ANGLE\s*[:\s=]+(\d+)/,/\bA\s*[:\s=]+(\d{2,3})\b/]) },
+    { id:'extem-mcf',   label:'EXTEM MCF',       unit:'mm',
+      val: extractNear(exSec,  [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/,/\bMCF\b[^\d]*(\d+)/]) },
+    { id:'extem-li30',  label:'EXTEM LI30',      unit:'%',
+      val: extractNear(exSec,  [/LI\s*30\s*[:\s=]+(\d+(?:\.\d+)?)/,/LI30\s*[:\s=]+(\d+)/]) },
+    { id:'extem-li60',  label:'EXTEM LI60',      unit:'%',
+      val: extractNear(exSec,  [/LI\s*60\s*[:\s=]+(\d+(?:\.\d+)?)/,/LI60\s*[:\s=]+(\d+)/]) },
+    { id:'intem-ct',    label:'INTEM CT',        unit:'s',
+      val: extractNear(inSec,  [/CT\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+    { id:'intem-cft',   label:'INTEM CFT',       unit:'s',
+      val: extractNear(inSec,  [/CFT\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+    { id:'intem-alpha', label:'INTEM Alpha',      unit:'°',
+      val: extractNear(inSec,  [/ALPHA\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+    { id:'intem-mcf',   label:'INTEM MCF',        unit:'mm',
+      val: extractNear(inSec,  [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+    { id:'fibtem-mcf',  label:'FIBTEM MCF',       unit:'mm',
+      val: extractNear(fibSec, [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+    { id:'fibtem-a5',   label:'FIBTEM A5',        unit:'mm',
+      val: extractNear(fibSec, [/A5\s*[:\s=]+(\d+(?:\.\d+)?)/,/A\s*5\s*[:\s=]+(\d+)/]) },
+    { id:'aptem-mcf',   label:'APTEM MCF',        unit:'mm',
+      val: extractNear(aptSec, [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+    { id:'aptem-li30',  label:'APTEM LI30',       unit:'%',
+      val: extractNear(aptSec, [/LI\s*30\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
+  ];
+
+  return fields.map(f => ({ ...f, found: f.val !== null, type: 'number' }));
+}
+
+// ---- HFA-PEFF OCR Parser ----
+function parseHFAPEFFText(rawText) {
+  const t = rawText;
+  const sex = document.getElementById('peff-sex').value;
+  const rhythm = document.getElementById('peff-rhythm').value;
+
+  function getNum(patterns) {
+    for (const pat of patterns) {
+      const m = t.match(pat);
+      if (m) { const v = parseFloat(m[1]); if (!isNaN(v)) return v; }
+    }
+    return null;
+  }
+
+  // Extract numeric values then map to dropdown category
+  const septalE = getNum([/septal\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i, /e[''`′]\s+sep\w*\s*[:\s=]+(\d+\.?\d*)/i, /sep\w*\s+e[''`′][:\s=]+(\d+\.?\d*)/i]);
+  const lateralE = getNum([/lat\w*\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i, /e[''`′]\s+lat\w*\s*[:\s=]+(\d+\.?\d*)/i]);
+  const ee = getNum([/e\s*\/\s*e[''`′]\s*(?:ratio|mean|avg|average)?\s*[:\s=]+(\d+\.?\d*)/i, /mean\s+e\/e[''`′]\s*[:\s=]+(\d+\.?\d*)/i, /e\/e[''`′][:\s=]+(\d+\.?\d*)/i]);
+  const trv = getNum([/tr\s*(?:velocity|vel|jet|vmax|peak)\s*[:\s=]+(\d+\.?\d*)/i, /tricuspid\s+regurg\w*\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i, /trv\s*[:\s=]+(\d+\.?\d*)/i]);
+  const gls = getNum([/gls\s*[:\s=]+[-−]?(\d+\.?\d*)/i, /global\s+long\w*\s+strain\s*[:\s=]+[-−]?(\d+\.?\d*)/i, /global\s+strain\s*[:\s=]+[-−]?(\d+\.?\d*)/i]);
+  const lavi = getNum([/lavi?\s*[:\s=]+(\d+\.?\d*)/i, /la\s+vol\w*\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i, /left\s+atrial?\s+vol\w*\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i]);
+  const lvmi = getNum([/lvmi?\s*[:\s=]+(\d+\.?\d*)/i, /lv\s+mass\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i, /left\s+vent\w*\s+mass\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i]);
+  const lvwt = getNum([/ivs\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)/i, /pw\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)/i, /sept\w*\s+thick\w*\s*[:\s=]+(\d+\.?\d*)/i, /wall\s+thick\w*\s*[:\s=]+(\d+\.?\d*)/i]);
+  const ntpro = getNum([/nt[\s-]*pro[\s-]*bnp\s*[:\s=]+(\d+\.?\d*)/i]);
+  const bnp   = getNum([/\bbnp\b\s*[:\s=]+(\d+\.?\d*)/i]);
+
+  // Map to dropdown values
+  function mapSeptal(v)  { if(v===null)return null; return v<7?'major':'none'; }
+  function mapLateral(v) { if(v===null)return null; return v<10?'major':'none'; }
+  function mapEE(v)      { if(v===null)return null; return v>=15?'major':v>=9?'minor':'none'; }
+  function mapTRV(v)     { if(v===null)return null; return v>2.8?'major':'none'; }
+  function mapGLS(v)     { if(v===null)return null; return Math.abs(v)<16?'minor':'none'; }
+  function mapLAVI(v)    { if(v===null)return null; return v>34?'major':v>=29?'minor':'none'; }
+  function mapLVWT(v)    { if(v===null)return null; return v>=12?'minor':'none'; }
+  function mapLVMI(v)    { if(v===null)return null;
+    const majCut=sex==='M'?149:122, minCut=sex==='M'?115:95;
+    return v>=majCut?'potential-major':(v>minCut?'minor':'none'); // potential-major needs RWT too
+  }
+  function mapBio() {
+    let nlo,nhi,nm,blo,bhi,bm;
+    if(rhythm==='SR'){nm=220;nlo=125;nhi=220;bm=80;blo=35;bhi=80;}
+    else{nm=660;nlo=365;nhi=660;bm=240;blo=105;bhi=240;}
+    if(ntpro!==null){return ntpro>nm?'major':ntpro>=nlo?'minor':'none';}
+    if(bnp!==null){return bnp>bm?'major':bnp>=blo?'minor':'none';}
+    return null;
+  }
+
+  const septalMapped=mapSeptal(septalE), lateralMapped=mapLateral(lateralE),
+        eeMapped=mapEE(ee), trvMapped=mapTRV(trv), glsMapped=mapGLS(gls),
+        laviMapped=mapLAVI(lavi), lvmiMapped=mapLVMI(lvmi), lvwtMapped=mapLVWT(lvwt),
+        bioMapped=mapBio();
+
+  function label(mapped, raw, unit) {
+    if (raw === null) return '—';
+    return `${raw} ${unit} → ${mapped === 'none' ? 'Not met' : mapped === 'potential-major' ? 'Minor (MAJOR if RWT>0.42)' : mapped.toUpperCase()}`;
+  }
+
+  return [
+    { id:'peff-septal',  label:"Septal e'",        found:septalE!==null,  val:septalMapped, display:label(septalMapped,septalE,'cm/s'),   raw:septalE,  type:'dropdown' },
+    { id:'peff-lateral', label:"Lateral e'",        found:lateralE!==null, val:lateralMapped,display:label(lateralMapped,lateralE,'cm/s'),  raw:lateralE, type:'dropdown' },
+    { id:'peff-ee',      label:"E/e' ratio",        found:ee!==null,       val:eeMapped,     display:label(eeMapped,ee,''),                 raw:ee,       type:'dropdown' },
+    { id:'peff-trv',     label:"TR velocity",       found:trv!==null,      val:trvMapped,    display:label(trvMapped,trv,'m/s'),             raw:trv,      type:'dropdown' },
+    { id:'peff-gls',     label:"GLS",               found:gls!==null,      val:glsMapped,    display:label(glsMapped,gls,'%'),               raw:gls,      type:'dropdown' },
+    { id:'peff-lavi',    label:"LAVI",              found:lavi!==null,     val:laviMapped,   display:label(laviMapped,lavi,'ml/m²'),         raw:lavi,     type:'dropdown' },
+    { id:'peff-lvmi',    label:"LVMI (+RWT)",       found:lvmi!==null,     val:lvmiMapped,   display:label(lvmiMapped,lvmi,'g/m²'),          raw:lvmi,     type:'dropdown' },
+    { id:'peff-lvwt',    label:"LV wall thickness", found:lvwt!==null,     val:lvwtMapped,   display:label(lvwtMapped,lvwt,'mm'),            raw:lvwt,     type:'dropdown' },
+    { id:'peff-bio',     label:"Natriuretic peptide",found:ntpro!==null||bnp!==null, val:bioMapped,
+      display: ntpro!==null?`NT-proBNP ${ntpro} → ${bioMapped}`:bnp!==null?`BNP ${bnp} → ${bioMapped}`:'—', raw:ntpro||bnp, type:'dropdown' },
+  ];
+}
+
+function renderOCRResults(results) {
+  const found = results.filter(r => r.found);
+  const notFound = results.filter(r => !r.found);
+  let html = '';
+  if (found.length === 0) {
+    html = '<div class="ocr-item not-found"><span>⚠️ No recognizable values detected. Try a clearer, well-lit photo or upload a higher-resolution image.</span></div>';
+  } else {
+    found.forEach(r => {
+      html += `<div class="ocr-item found">
+        <input type="checkbox" id="ocr-chk-${r.id}" checked>
+        <label for="ocr-chk-${r.id}" style="flex:1;cursor:pointer">
+          <span class="ocr-field-name">${r.label}</span>
+          <span class="ocr-field-val">${r.display}</span>
+        </label>
+      </div>`;
+    });
+    if (notFound.length > 0) {
+      html += `<div class="ocr-item not-found" style="font-size:12px;color:var(--muted)">Not detected: ${notFound.map(r=>r.label).join(', ')}</div>`;
+    }
+  }
+  document.getElementById('ocr-item-list').innerHTML = html;
+}
+
+function applyOCRValues() {
+  ocrResults.filter(r => r.found).forEach(r => {
+    const chk = document.getElementById('ocr-chk-' + r.id);
+    if (!chk || !chk.checked) return;
+
+    if (r.type === 'number') {
+      // ROTEM numeric fields
+      const el = document.getElementById(r.id);
+      if (el && r.val !== null) {
+        el.value = r.val;
+        // Mark as OCR filled
+        const fieldWrap = el.closest('.field');
+        if (fieldWrap) { fieldWrap.classList.add('ocr-filled'); fieldWrap.classList.remove('set-abnormal','set-normal'); }
+      }
+    } else {
+      // HFA-PEFF dropdown fields
+      const el = document.getElementById(r.id);
+      if (el && r.val !== null && r.val !== 'potential-major') {
+        // Find matching option
+        const opt = [...el.options].find(o => o.value === r.val);
+        if (opt) {
+          el.value = r.val;
+          const fieldWrap = el.closest('.field');
+          if (fieldWrap) fieldWrap.classList.add('ocr-filled');
+        }
+      } else if (r.val === 'potential-major' && el) {
+        // Map to minor (conservative — user needs to check RWT)
+        const opt = [...el.options].find(o => o.value === 'minor');
+        if (opt) { el.value = 'minor'; const fw = el.closest('.field'); if(fw) fw.classList.add('ocr-filled'); }
+      }
+    }
+  });
+
+  // Trigger recalculation
+  if (scanCalcMode === 'rotem') rotemCalc();
+  else peffRecalc();
+
+  closeScanModal();
+
+  // Show banner
+  const count = ocrResults.filter(r => {
+    const chk = document.getElementById('ocr-chk-' + r.id);
+    return r.found && chk && chk.checked;
+  }).length;
+
+  const banner = document.getElementById(scanCalcMode === 'rotem' ? 'rotem-ocr-banner' : 'peff-ocr-banner');
+  if (banner) {
+    banner.style.display = 'block';
+    banner.style.background = '#fffbeb';
+    banner.style.borderColor = '#fde68a';
+    banner.style.padding = '12px 16px';
+    banner.style.borderRadius = '10px';
+    banner.style.marginBottom = '16px';
+    banner.style.fontSize = '13px';
+    banner.innerHTML = `📷 <strong>${count} field${count!==1?'s':''} auto-filled from scan.</strong> Purple-highlighted fields were set by OCR — please review and adjust if needed. <button class="btn" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="clearOCRHighlights('${scanCalcMode}')">Clear highlights</button>`;
+  }
+}
+
+function clearOCRHighlights(mode) {
+  document.querySelectorAll('#page-' + (mode === 'rotem' ? 'rotem' : 'hfapeff') + ' .field').forEach(f => f.classList.remove('ocr-filled'));
+  const banner = document.getElementById(mode === 'rotem' ? 'rotem-ocr-banner' : 'peff-ocr-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+// Add banner placeholder divs to ROTEM page
+document.addEventListener('DOMContentLoaded', () => {
+  const rotemPage = document.getElementById('page-rotem');
+  const banner = document.createElement('div');
+  banner.id = 'rotem-ocr-banner';
+  banner.style.display = 'none';
+  rotemPage.querySelector('.controls').after(banner);
+});
+</script>
+</body>
+</html>
