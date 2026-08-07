@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Critical Care Calculators</title>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
   :root {
     --major:      #d94656;
@@ -76,8 +75,7 @@
   button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
   button.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   button.btn.primary:hover { background: #1e40af; }
-  button.btn.scan { background: #0f766e; color: #fff; border-color: #0f766e; }
-  button.btn.scan:hover { background: #0d6460; }
+
   button.btn.danger { background: var(--red); color: #fff; border-color: var(--red); }
   button.btn.danger:hover { background: #b91c1c; }
 
@@ -111,10 +109,7 @@
   .field.set-minor select, .field.set-minor input { border-color: var(--minor); background-color: var(--minor-bg); }
   .field.set-abnormal select, .field.set-abnormal input { border-color: var(--red); background-color: var(--red-bg); }
   .field.set-normal select, .field.set-normal input { border-color: var(--green); background-color: var(--green-bg); }
-  /* Highlight fields auto-filled by OCR */
-  .field.ocr-filled select, .field.ocr-filled input { border-color: #7c3aed; background-color: #f5f3ff; box-shadow: 0 0 0 2px rgba(124,58,237,0.15); }
-
-  .note { font-size: 12px; color: var(--muted); margin-top: 8px; font-style: italic; }
+  .note{ font-size: 12px; color: var(--muted); margin-top: 8px; font-style: italic; }
 
   /* ---- Summary dark card ---- */
   .summary { background: linear-gradient(135deg, #1a2233, #2d3e56); color: #fff; border: none; }
@@ -136,21 +131,6 @@
   .interp.info { background: rgba(29,78,216,0.12);  border-left: 4px solid #3b82f6; }
   .interp strong { display: block; margin-bottom: 2px; font-size: 15px; }
 
-  /* ---- ROTEM ---- */
-  .rotem-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-  .reco-list { display: flex; flex-direction: column; gap: 8px; }
-  .reco-item { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; align-items: flex-start; }
-  .reco-item.critical { background: var(--red-bg); border-left: 3px solid var(--red); }
-  .reco-item.warning  { background: var(--amber-bg); border-left: 3px solid var(--amber); }
-  .reco-item.normal   { background: var(--green-bg); border-left: 3px solid var(--green); }
-  .reco-item.info     { background: var(--accent-lt); border-left: 3px solid #3b82f6; }
-  .reco-item .reco-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-  .reco-item .reco-text strong { display: block; margin-bottom: 1px; }
-  .ref-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
-  .ref-table th { text-align: left; padding: 6px 10px; background: var(--bg); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); border-bottom: 1px solid var(--border); }
-  .ref-table td { padding: 7px 10px; border-bottom: 1px solid #f0f2f5; }
-  .ref-table tr:last-child td { border-bottom: none; }
-
   /* ---- Home grid ---- */
   .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
   .calc-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; transition: box-shadow 0.15s, transform 0.1s; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
@@ -162,83 +142,6 @@
 
   .footer { font-size: 12px; color: var(--muted); margin-top: 20px; border-top: 1px solid var(--border); padding-top: 12px; }
   .footer p { margin: 4px 0; }
-
-  /* ================================================================
-     CAMERA / OCR MODAL
-     ================================================================ */
-  .modal-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.65); z-index: 1000;
-    align-items: center; justify-content: center;
-  }
-  .modal-overlay.open { display: flex; }
-  .modal {
-    background: #fff; border-radius: 14px; width: min(680px, 96vw);
-    max-height: 92vh; overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-    display: flex; flex-direction: column;
-  }
-  .modal-header {
-    padding: 16px 20px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; background: #fff; z-index: 1; border-radius: 14px 14px 0 0;
-  }
-  .modal-header h3 { margin: 0; font-size: 16px; }
-  .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--muted); padding: 0 4px; line-height: 1; }
-  .modal-close:hover { color: var(--text); }
-  .modal-body { padding: 20px; flex: 1; }
-  .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; background: #f8fafb; border-radius: 0 0 14px 14px; }
-
-  /* Camera preview */
-  .cam-container {
-    position: relative; background: #0a0a0a; border-radius: 8px;
-    overflow: hidden; width: 100%; aspect-ratio: 4/3;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #cam-video { width: 100%; height: 100%; object-fit: cover; display: none; }
-  #cam-canvas { width: 100%; height: 100%; object-fit: contain; display: none; }
-  .cam-placeholder { text-align: center; color: #aaa; padding: 40px 20px; }
-  .cam-placeholder .cam-ph-icon { font-size: 48px; margin-bottom: 10px; }
-  .cam-placeholder p { margin: 4px 0; font-size: 14px; }
-
-  /* Camera controls */
-  .cam-controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
-
-  /* OCR Status */
-  .ocr-status {
-    margin-top: 14px; padding: 12px 14px; border-radius: 8px;
-    background: var(--accent-lt); border: 1px solid #bfdbfe;
-    font-size: 13px; display: none;
-  }
-  .ocr-status.visible { display: flex; align-items: center; gap: 10px; }
-  .ocr-spinner {
-    width: 18px; height: 18px; border: 2px solid #93c5fd;
-    border-top-color: var(--accent); border-radius: 50%;
-    animation: spin 0.8s linear infinite; flex-shrink: 0;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* OCR Results */
-  .ocr-results { margin-top: 16px; display: none; }
-  .ocr-results.visible { display: block; }
-  .ocr-results h4 { margin: 0 0 10px 0; font-size: 14px; color: var(--text); }
-  .ocr-item-list { display: flex; flex-direction: column; gap: 6px; }
-  .ocr-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; border-radius: 6px; font-size: 13px;
-    background: #f8fafc; border: 1px solid var(--border);
-  }
-  .ocr-item.found { background: var(--green-bg); border-color: #bbf7d0; }
-  .ocr-item.not-found { background: #f8fafc; color: var(--muted); }
-  .ocr-item input[type="checkbox"] { width: 15px; height: 15px; flex-shrink: 0; accent-color: var(--accent); }
-  .ocr-item .ocr-field-name { font-weight: 600; flex: 1; }
-  .ocr-item .ocr-field-val { font-family: monospace; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; }
-  .ocr-item .ocr-field-mapped { font-size: 11px; color: var(--muted); margin-left: 4px; }
-
-  /* Raw OCR text (collapsible) */
-  .ocr-raw details { margin-top: 12px; }
-  .ocr-raw summary { cursor: pointer; font-size: 12px; color: var(--accent); }
-  .ocr-raw pre { font-size: 11px; background: #f1f4f8; padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; max-height: 200px; overflow-y: auto; margin: 6px 0 0 0; color: var(--muted); }
 
   /* ---- PE calculator ---- */
   .pe-check-field {
@@ -317,65 +220,6 @@
 <body>
 
 <!-- ================================================================
-     CAMERA / OCR MODAL (shared)
-     ================================================================ -->
-<div class="modal-overlay" id="scan-modal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modal-title">📷 Scan &amp; Auto-Fill</h3>
-      <button class="modal-close" onclick="closeScanModal()">✕</button>
-    </div>
-    <div class="modal-body">
-
-      <!-- Camera / image preview -->
-      <div class="cam-container" id="cam-container">
-        <video id="cam-video" autoplay playsinline></video>
-        <canvas id="cam-canvas"></canvas>
-        <div class="cam-placeholder" id="cam-placeholder">
-          <div class="cam-ph-icon">📷</div>
-          <p><strong>Open camera or upload an image</strong></p>
-          <p style="font-size:12px;">Point at the printout, monitor screen, or report page</p>
-        </div>
-      </div>
-
-      <div class="cam-controls">
-        <button class="btn scan" id="btn-open-camera" onclick="openCamera()">📷 Open Camera</button>
-        <button class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none">📸 Capture Photo</button>
-        <button class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none">🔄 Retake</button>
-        <label class="btn" style="cursor:pointer">
-          📁 Upload Image
-          <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
-        </label>
-        <button class="btn primary" id="btn-analyze" onclick="runOCR()" style="display:none">🔍 Analyze Image</button>
-      </div>
-
-      <!-- OCR Status -->
-      <div class="ocr-status" id="ocr-status">
-        <div class="ocr-spinner"></div>
-        <span id="ocr-status-text">Initializing OCR engine…</span>
-      </div>
-
-      <!-- OCR Results -->
-      <div class="ocr-results" id="ocr-results">
-        <h4>Detected values — uncheck any you don't want applied:</h4>
-        <div class="ocr-item-list" id="ocr-item-list"></div>
-        <div class="ocr-raw">
-          <details>
-            <summary>View raw OCR text</summary>
-            <pre id="ocr-raw-text"></pre>
-          </details>
-        </div>
-      </div>
-
-    </div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeScanModal()">Cancel</button>
-      <button class="btn primary" id="btn-apply" onclick="applyOCRValues()" style="display:none">✅ Apply to Calculator</button>
-    </div>
-  </div>
-</div>
-
-<!-- ================================================================
      SHELL
      ================================================================ -->
 <div class="shell">
@@ -392,9 +236,6 @@
     </div>
     <div class="nav-item" data-page="hfapeff" onclick="showPage('hfapeff',this)">
       <span class="nav-icon">🫀</span><span class="nav-label">HFA-PEFF Score</span><span class="nav-tag">HFpEF</span>
-    </div>
-    <div class="nav-item" data-page="rotem" onclick="showPage('rotem',this)">
-      <span class="nav-icon">🩸</span><span class="nav-label">ROTEM Interpreter</span><span class="nav-tag">Coag</span>
     </div>
     <div class="nav-item" data-page="pe" onclick="showPage('pe',this)">
       <span class="nav-icon">🫁</span><span class="nav-label">PE Risk Category</span><span class="nav-tag">2026</span>
@@ -416,14 +257,8 @@
         <div class="calc-card" onclick="showPage('hfapeff', document.querySelector('[data-page=hfapeff]'))">
           <div class="cc-icon">🫀</div>
           <p class="cc-title">HFA-PEFF Score</p>
-          <p class="cc-desc">Diagnostic algorithm for HFpEF. Scores functional, morphological, and biomarker domains. Supports camera scan of echo reports.</p>
+          <p class="cc-desc">Diagnostic algorithm for HFpEF. Scores functional, morphological, and biomarker domains.</p>
           <span class="cc-tag">Heart Failure</span>
-        </div>
-        <div class="calc-card" onclick="showPage('rotem', document.querySelector('[data-page=rotem]'))">
-          <div class="cc-icon">🩸</div>
-          <p class="cc-title">ROTEM Interpreter</p>
-          <p class="cc-desc">EXTEM · INTEM · FIBTEM · APTEM. Guides product replacement in coagulopathy. Point camera at ROTEM printout to auto-fill.</p>
-          <span class="cc-tag">Coagulation</span>
         </div>
         <div class="calc-card" onclick="showPage('pe', document.querySelector('[data-page=pe]'))">
           <div class="cc-icon">🫁</div>
@@ -445,8 +280,6 @@
         <button class="btn primary" onclick="window.print()">🖨️ Print / PDF</button>
         <button class="btn" onclick="peffResetAll()">↺ Reset</button>
       </div>
-
-      <div class="card" style="background:#fffbeb;border-color:#fde68a;" id="peff-ocr-banner" style="display:none"></div>
 
       <div class="card">
         <h2>👤 Patient Context</h2>
@@ -500,92 +333,6 @@
       <div class="footer">
         <p><strong>Reference:</strong> Pieske B et al. <em>Eur Heart J</em> 2019;40(40):3297–3317.</p>
         <p style="font-size:11px;margin-top:8px;">Clinical decision support only. Confirm against current guidelines.</p>
-      </div>
-    </div>
-
-    <!-- ===================== ROTEM ===================== -->
-    <div id="page-rotem" class="page">
-      <div class="page-header">
-        <h1>ROTEM Interpreter</h1>
-        <p class="subtitle">Rotational thromboelastometry — interpretation and product guidance</p>
-      </div>
-
-      <div class="controls">
-        <button class="btn primary" onclick="window.print()">🖨️ Print / PDF</button>
-        <button class="btn scan" onclick="openScanModal('rotem')">📷 Scan ROTEM Printout</button>
-        <button class="btn" onclick="rotemReset()">↺ Reset</button>
-      </div>
-
-      <div class="card">
-        <h2>🔵 EXTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Extrinsic pathway)</span></h2>
-        <div class="rotem-grid">
-          <div class="field" id="field-extem-ct"><label>CT (s) [ref 38–79]</label><input type="number" id="extem-ct" placeholder="e.g. 65" oninput="rotemCalc()"></div>
-          <div class="field" id="field-extem-cft"><label>CFT (s) [ref 34–159]</label><input type="number" id="extem-cft" placeholder="e.g. 80" oninput="rotemCalc()"></div>
-          <div class="field" id="field-extem-alpha"><label>Alpha angle (°) [ref 63–83]</label><input type="number" id="extem-alpha" placeholder="e.g. 72" oninput="rotemCalc()"></div>
-          <div class="field" id="field-extem-mcf"><label>MCF (mm) [ref 50–72]</label><input type="number" id="extem-mcf" placeholder="e.g. 58" oninput="rotemCalc()"></div>
-          <div class="field" id="field-extem-li30"><label>LI30 (%) [ref ≥ 85]</label><input type="number" id="extem-li30" placeholder="e.g. 97" oninput="rotemCalc()"></div>
-          <div class="field" id="field-extem-li60"><label>LI60 (%) [ref ≥ 85]</label><input type="number" id="extem-li60" placeholder="e.g. 96" oninput="rotemCalc()"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>🟣 INTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Intrinsic pathway)</span></h2>
-        <div class="rotem-grid">
-          <div class="field" id="field-intem-ct"><label>CT (s) [ref 100–240]</label><input type="number" id="intem-ct" placeholder="e.g. 180" oninput="rotemCalc()"></div>
-          <div class="field" id="field-intem-cft"><label>CFT (s) [ref 30–110]</label><input type="number" id="intem-cft" placeholder="e.g. 60" oninput="rotemCalc()"></div>
-          <div class="field" id="field-intem-alpha"><label>Alpha angle (°) [ref 70–83]</label><input type="number" id="intem-alpha" placeholder="e.g. 76" oninput="rotemCalc()"></div>
-          <div class="field" id="field-intem-mcf"><label>MCF (mm) [ref 50–72]</label><input type="number" id="intem-mcf" placeholder="e.g. 58" oninput="rotemCalc()"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>🟦 FIBTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Fibrinogen / fibrin clot)</span></h2>
-        <div class="rotem-grid">
-          <div class="field" id="field-fibtem-mcf"><label>MCF (mm) [ref 9–25]</label><input type="number" id="fibtem-mcf" placeholder="e.g. 14" oninput="rotemCalc()"></div>
-          <div class="field" id="field-fibtem-a5"><label>A5 (mm) [ref ≥ 7, optional]</label><input type="number" id="fibtem-a5" placeholder="e.g. 9" oninput="rotemCalc()"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>🟢 APTEM <span style="font-size:12px;font-weight:400;color:var(--muted)">(Fibrinolysis — optional)</span></h2>
-        <div class="rotem-grid">
-          <div class="field" id="field-aptem-mcf"><label>MCF (mm) [compare to EXTEM]</label><input type="number" id="aptem-mcf" placeholder="e.g. 58" oninput="rotemCalc()"></div>
-          <div class="field" id="field-aptem-li30"><label>LI30 (%) [ref ≥ 85]</label><input type="number" id="aptem-li30" placeholder="e.g. 97" oninput="rotemCalc()"></div>
-        </div>
-        <div class="note">APTEM corrects for fibrinolysis. APTEM MCF significantly higher than EXTEM MCF confirms hyperfibrinolysis.</div>
-      </div>
-
-      <div class="card summary">
-        <h2 style="color:#fff;">📋 Interpretation &amp; Recommendations</h2>
-        <div id="rotem-results"><div class="interp info"><strong>Enter values above to generate interpretation</strong>Enter one or more ROTEM parameters to see coagulation assessment and product recommendations.</div></div>
-      </div>
-
-      <div class="card">
-        <h2>💉 Platelet Contribution Estimate</h2>
-        <p style="font-size:13px;color:var(--muted);margin:0 0 8px 0">Platelet contribution ≈ EXTEM MCF − FIBTEM MCF. Difference &gt;15 mm → platelets contributing substantially.</p>
-        <div id="platelet-contrib" class="interp info" style="margin:0"><strong>—</strong>Enter EXTEM MCF and FIBTEM MCF to estimate.</div>
-      </div>
-
-      <div class="card">
-        <h2>📖 Reference Ranges</h2>
-        <table class="ref-table">
-          <thead><tr><th>Assay</th><th>Parameter</th><th>Reference</th><th>If Abnormal</th></tr></thead>
-          <tbody>
-            <tr><td>EXTEM</td><td>CT</td><td>38–79 s</td><td>↑: extrinsic pathway defect → FFP / PCC</td></tr>
-            <tr><td>EXTEM</td><td>CFT</td><td>34–159 s</td><td>↑: slow clot formation → fibrinogen ± platelets</td></tr>
-            <tr><td>EXTEM</td><td>Alpha angle</td><td>63–83°</td><td>↓: slow clot formation → fibrinogen ± platelets</td></tr>
-            <tr><td>EXTEM</td><td>MCF</td><td>50–72 mm</td><td>↓: clot strength ↓ → fibrinogen and/or platelets</td></tr>
-            <tr><td>EXTEM</td><td>LI30/LI60</td><td>≥ 85%</td><td>↓: hyperfibrinolysis → tranexamic acid</td></tr>
-            <tr><td>INTEM</td><td>CT</td><td>100–240 s</td><td>↑: intrinsic pathway or heparin → check HEPTEM / FFP</td></tr>
-            <tr><td>FIBTEM</td><td>MCF</td><td>9–25 mm</td><td>&lt;9: fibrinogen deficiency → fibrinogen conc. / cryoprecipitate</td></tr>
-            <tr><td>FIBTEM</td><td>A5</td><td>≥ 7 mm</td><td>&lt;7: early fibrinogen deficiency</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="footer">
-        <p><strong>References:</strong> Görlinger K et al. <em>Anesthesiology</em> 2011;115(5):1179. Lang T et al. <em>J Thromb Haemost</em> 2005;3(3):586–592.</p>
-        <p style="font-size:11px;margin-top:8px;">Clinical decision support only. Confirm against institutional protocols.</p>
       </div>
     </div>
 
@@ -899,75 +646,10 @@ function peffResetAll(){
   document.getElementById('peff-rhythm').value='SR';
   peffRebuild();
   document.querySelectorAll('#page-hfapeff .row select').forEach(s=>{s.selectedIndex=0;});
-  document.querySelectorAll('#page-hfapeff .field').forEach(f=>f.classList.remove('ocr-filled'));
   peffRecalc();
 }
 peffRebuild();
 
-// ----------------------------------------------------------------
-// ROTEM CALCULATOR
-// ----------------------------------------------------------------
-function rVal(id){const v=parseFloat(document.getElementById(id).value);return isNaN(v)?null:v;}
-function rotemColorField(fId,val,lo,hi){
-  const w=document.getElementById(fId); if(!w)return;
-  if(val===null){w.classList.remove('set-abnormal','set-normal');return;}
-  w.classList.toggle('set-abnormal',val<lo||val>hi);
-  w.classList.toggle('set-normal',!(val<lo||val>hi));
-}
-function rotemCalc(){
-  const ex={ct:rVal('extem-ct'),cft:rVal('extem-cft'),alpha:rVal('extem-alpha'),mcf:rVal('extem-mcf'),li30:rVal('extem-li30'),li60:rVal('extem-li60')};
-  const intem={ct:rVal('intem-ct'),cft:rVal('intem-cft'),alpha:rVal('intem-alpha'),mcf:rVal('intem-mcf')};
-  const fib={mcf:rVal('fibtem-mcf'),a5:rVal('fibtem-a5')};
-  const apt={mcf:rVal('aptem-mcf'),li30:rVal('aptem-li30')};
-
-  rotemColorField('field-extem-ct',ex.ct,38,79); rotemColorField('field-extem-cft',ex.cft,34,159);
-  rotemColorField('field-extem-alpha',ex.alpha,63,83); rotemColorField('field-extem-mcf',ex.mcf,50,72);
-  rotemColorField('field-extem-li30',ex.li30,85,100); rotemColorField('field-extem-li60',ex.li60,85,100);
-  rotemColorField('field-intem-ct',intem.ct,100,240); rotemColorField('field-intem-cft',intem.cft,30,110);
-  rotemColorField('field-intem-alpha',intem.alpha,70,83); rotemColorField('field-intem-mcf',intem.mcf,50,72);
-  rotemColorField('field-fibtem-mcf',fib.mcf,9,25); rotemColorField('field-fibtem-a5',fib.a5,7,999);
-  rotemColorField('field-aptem-li30',apt.li30,85,100);
-
-  const hasAny=Object.values(ex).some(v=>v!==null)||Object.values(intem).some(v=>v!==null)||Object.values(fib).some(v=>v!==null)||Object.values(apt).some(v=>v!==null);
-  if(!hasAny){
-    document.getElementById('rotem-results').innerHTML='<div class="interp info"><strong>Enter values above to generate interpretation</strong>Enter one or more ROTEM parameters.</div>';
-    document.getElementById('platelet-contrib').className='interp info';
-    document.getElementById('platelet-contrib').innerHTML='<strong>—</strong>Enter EXTEM MCF and FIBTEM MCF to estimate.';
-    return;
-  }
-  const findings=[];
-  if(ex.li30!==null&&ex.li30<85){findings.push({level:'critical',icon:'🚨',title:`Hyperfibrinolysis (EXTEM LI30 = ${ex.li30}%)`,text:'Ref ≥ 85%. Immediate tranexamic acid indicated if not already given.'});}
-  else if(ex.li60!==null&&ex.li60<85){findings.push({level:'critical',icon:'🚨',title:`Fibrinolysis (EXTEM LI60 = ${ex.li60}%)`,text:'Consider tranexamic acid. Confirm with APTEM.'});}
-  if(ex.mcf!==null&&apt.mcf!==null){const diff=apt.mcf-ex.mcf;if(diff>=8)findings.push({level:'critical',icon:'🚨',title:`Fibrinolysis confirmed (APTEM−EXTEM MCF = +${diff} mm)`,text:'Hyperfibrinolysis confirmed — tranexamic acid indicated.'});}
-  if(apt.li30!==null&&apt.li30<85)findings.push({level:'critical',icon:'🚨',title:`APTEM LI30 low (${apt.li30}%)`,text:'Persistent fibrinolysis despite inhibitor.'});
-  if(ex.ct!==null&&ex.ct>79){const sev=ex.ct>120?'critical':'warning';findings.push({level:sev,icon:'⚠️',title:`EXTEM CT prolonged (${ex.ct} s)`,text:`Ref 38–79 s. Extrinsic/common pathway defect. Consider FFP (10–15 ml/kg) or PCC. Correlate with INR/PT.`});}
-  if(intem.ct!==null&&intem.ct>240){
-    let note='';
-    if(ex.ct!==null&&ex.ct<=79)note=' EXTEM CT normal — consider heparin effect. Check HEPTEM; if corrected, give protamine.';
-    findings.push({level:intem.ct>360?'critical':'warning',icon:'⚠️',title:`INTEM CT prolonged (${intem.ct} s)`,text:`Ref 100–240 s. Intrinsic pathway deficiency or heparin.${note}`});
-  }
-  if(fib.mcf!==null&&fib.mcf<9){findings.push({level:fib.mcf<6?'critical':'warning',icon:fib.mcf<6?'🚨':'⚠️',title:`FIBTEM MCF low (${fib.mcf} mm)`,text:'Ref 9–25 mm. Fibrinogen deficiency — give fibrinogen concentrate (target MCF >12 mm, fibrinogen >2 g/L) or cryoprecipitate.'});}
-  else if(fib.a5!==null&&fib.a5<7)findings.push({level:'warning',icon:'⚠️',title:`FIBTEM A5 low (${fib.a5} mm)`,text:'Ref ≥ 7 mm. Early fibrinogen deficiency — monitor and consider pre-emptive replacement.'});
-  if(ex.cft!==null&&ex.cft>159)findings.push({level:'warning',icon:'⚠️',title:`EXTEM CFT prolonged (${ex.cft} s)`,text:'Ref 34–159 s. Slow clot formation. If FIBTEM MCF low → fibrinogen; if normal → platelet dysfunction.'});
-  if(ex.alpha!==null&&ex.alpha<63)findings.push({level:'warning',icon:'⚠️',title:`EXTEM Alpha reduced (${ex.alpha}°)`,text:'Ref 63–83°. Reduced clot formation rate. Correlate with FIBTEM MCF.'});
-  if(ex.mcf!==null&&ex.mcf<50){
-    let cause=fib.mcf!==null?(ex.mcf-fib.mcf<15?` FIBTEM ${fib.mcf} mm — fibrinogen dominant. Prioritise fibrinogen.`:` FIBTEM ${fib.mcf} mm — platelets also low. Consider platelets + fibrinogen.`):'Get FIBTEM MCF to differentiate.';
-    findings.push({level:ex.mcf<40?'critical':'warning',icon:ex.mcf<40?'🚨':'⚠️',title:`EXTEM MCF reduced (${ex.mcf} mm)`,text:`Ref 50–72 mm.${cause}`});
-  }
-  if(intem.mcf!==null&&intem.mcf<50)findings.push({level:'warning',icon:'⚠️',title:`INTEM MCF reduced (${intem.mcf} mm)`,text:'Ref 50–72 mm. Compare to EXTEM recommendations.'});
-  if(findings.length===0)findings.push({level:'normal',icon:'✅',title:'All values within reference range',text:'No abnormalities detected. Continue monitoring if clinical bleeding ongoing.'});
-
-  document.getElementById('rotem-results').innerHTML='<div class="reco-list">'+findings.map(f=>`<div class="reco-item ${f.level}"><div class="reco-icon">${f.icon}</div><div class="reco-text"><strong>${f.title}</strong>${f.text}</div></div>`).join('')+'</div>';
-
-  const pc=document.getElementById('platelet-contrib');
-  if(ex.mcf!==null&&fib.mcf!==null){
-    const diff=ex.mcf-fib.mcf;
-    if(diff>=15){pc.className='interp mid';pc.innerHTML=`<strong>Platelet contribution ≈ ${diff} mm</strong>Difference ≥ 15 mm — platelets contributing substantially. Consider platelet transfusion alongside fibrinogen.`;}
-    else{pc.className='interp high';pc.innerHTML=`<strong>Platelet contribution ≈ ${diff} mm</strong>Difference &lt; 15 mm — fibrinogen dominant. Prioritise fibrinogen over platelets.`;}
-  } else {
-    pc.className='interp info'; pc.innerHTML='<strong>—</strong>Enter EXTEM MCF and FIBTEM MCF to estimate.';
-  }
-}
 // ----------------------------------------------------------------
 // PE CATEGORY CALCULATOR (2026 AHA/ACC Guideline)
 // ----------------------------------------------------------------
@@ -1165,409 +847,7 @@ function peReset() {
   badge.textContent = '0 pts'; badge.className = 'badge zero';
 }
 
-function rotemReset(){
-  ['extem-ct','extem-cft','extem-alpha','extem-mcf','extem-li30','extem-li60','intem-ct','intem-cft','intem-alpha','intem-mcf','fibtem-mcf','fibtem-a5','aptem-mcf','aptem-li30']
-    .forEach(id=>{document.getElementById(id).value='';});
-  document.querySelectorAll('#page-rotem .field').forEach(f=>f.classList.remove('ocr-filled'));
-  rotemCalc();
-}
 
-// ----------------------------------------------------------------
-// CAMERA / OCR SYSTEM
-// ----------------------------------------------------------------
-let scanCalcMode = null;  // 'rotem' | 'hfapeff'
-let cameraStream = null;
-let capturedImageData = null;
-let ocrResults = [];
-
-function openScanModal(mode) {
-  scanCalcMode = mode;
-  document.getElementById('modal-title').textContent =
-    mode === 'rotem' ? '📷 Scan ROTEM Printout' : '📷 Scan Echo Report';
-  document.getElementById('scan-modal').classList.add('open');
-  resetModalState();
-}
-
-function closeScanModal() {
-  stopCamera();
-  document.getElementById('scan-modal').classList.remove('open');
-  resetModalState();
-}
-
-function resetModalState() {
-  stopCamera();
-  capturedImageData = null;
-  ocrResults = [];
-  document.getElementById('cam-video').style.display = 'none';
-  document.getElementById('cam-canvas').style.display = 'none';
-  document.getElementById('cam-placeholder').style.display = 'flex';
-  document.getElementById('btn-open-camera').style.display = 'inline-flex';
-  document.getElementById('btn-capture').style.display = 'none';
-  document.getElementById('btn-retake').style.display = 'none';
-  document.getElementById('btn-analyze').style.display = 'none';
-  document.getElementById('btn-apply').style.display = 'none';
-  document.getElementById('ocr-status').classList.remove('visible');
-  document.getElementById('ocr-results').classList.remove('visible');
-  document.getElementById('file-input').value = '';
-}
-
-function stopCamera() {
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
-  document.getElementById('cam-video').srcObject = null;
-}
-
-async function openCamera() {
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-    });
-    const video = document.getElementById('cam-video');
-    video.srcObject = cameraStream;
-    video.style.display = 'block';
-    document.getElementById('cam-canvas').style.display = 'none';
-    document.getElementById('cam-placeholder').style.display = 'none';
-    document.getElementById('btn-open-camera').style.display = 'none';
-    document.getElementById('btn-capture').style.display = 'inline-flex';
-    document.getElementById('btn-retake').style.display = 'none';
-    document.getElementById('btn-analyze').style.display = 'none';
-  } catch (err) {
-    alert('Camera access denied or unavailable. Please use "Upload Image" instead.\n\n' + err.message);
-  }
-}
-
-function capturePhoto() {
-  const video = document.getElementById('cam-video');
-  const canvas = document.getElementById('cam-canvas');
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-  capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
-  stopCamera();
-  video.style.display = 'none';
-  canvas.style.display = 'block';
-  document.getElementById('btn-capture').style.display = 'none';
-  document.getElementById('btn-retake').style.display = 'inline-flex';
-  document.getElementById('btn-analyze').style.display = 'inline-flex';
-}
-
-function retakePhoto() {
-  capturedImageData = null;
-  document.getElementById('cam-canvas').style.display = 'none';
-  document.getElementById('btn-retake').style.display = 'none';
-  document.getElementById('btn-analyze').style.display = 'none';
-  document.getElementById('btn-apply').style.display = 'none';
-  document.getElementById('ocr-results').classList.remove('visible');
-  document.getElementById('ocr-status').classList.remove('visible');
-  openCamera();
-}
-
-function handleFileUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  stopCamera();
-  const reader = new FileReader();
-  reader.onload = e => {
-    capturedImageData = e.target.result;
-    const canvas = document.getElementById('cam-canvas');
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width; canvas.height = img.height;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      canvas.style.display = 'block';
-      document.getElementById('cam-video').style.display = 'none';
-      document.getElementById('cam-placeholder').style.display = 'none';
-      document.getElementById('btn-open-camera').style.display = 'inline-flex';
-      document.getElementById('btn-capture').style.display = 'none';
-      document.getElementById('btn-retake').style.display = 'inline-flex';
-      document.getElementById('btn-analyze').style.display = 'inline-flex';
-      document.getElementById('ocr-results').classList.remove('visible');
-      document.getElementById('btn-apply').style.display = 'none';
-    };
-    img.src = capturedImageData;
-  };
-  reader.readAsDataURL(file);
-}
-
-async function runOCR() {
-  if (!capturedImageData) return;
-  const statusEl = document.getElementById('ocr-status');
-  const statusText = document.getElementById('ocr-status-text');
-  statusEl.classList.add('visible');
-  document.getElementById('ocr-results').classList.remove('visible');
-  document.getElementById('btn-apply').style.display = 'none';
-  document.getElementById('btn-analyze').disabled = true;
-
-  try {
-    statusText.textContent = 'Loading OCR engine…';
-    const worker = await Tesseract.createWorker('eng', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          statusText.textContent = `Recognizing text… ${Math.round(m.progress * 100)}%`;
-        } else {
-          statusText.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
-        }
-      }
-    });
-
-    statusText.textContent = 'Analyzing image…';
-    const { data: { text } } = await worker.recognize(capturedImageData);
-    await worker.terminate();
-
-    document.getElementById('ocr-raw-text').textContent = text;
-    statusEl.classList.remove('visible');
-
-    // Parse according to mode
-    if (scanCalcMode === 'rotem') {
-      ocrResults = parseROTEMText(text);
-    } else {
-      ocrResults = parseHFAPEFFText(text);
-    }
-
-    renderOCRResults(ocrResults);
-    document.getElementById('ocr-results').classList.add('visible');
-    if (ocrResults.some(r => r.found)) {
-      document.getElementById('btn-apply').style.display = 'inline-flex';
-    }
-  } catch (err) {
-    statusText.textContent = '❌ OCR failed: ' + err.message;
-  } finally {
-    document.getElementById('btn-analyze').disabled = false;
-  }
-}
-
-// ---- ROTEM OCR Parser ----
-function parseROTEMText(rawText) {
-  const t = rawText.toUpperCase().replace(/[|[\]{}]/g, ' ').replace(/\s+/g, ' ');
-
-  // Extract a numeric value near a keyword, optionally within a section
-  function extractNear(text, patterns) {
-    for (const pat of patterns) {
-      const m = text.match(pat);
-      if (m) {
-        const v = parseFloat(m[1]);
-        if (!isNaN(v)) return v;
-      }
-    }
-    return null;
-  }
-
-  // Try to find section boundaries
-  function getSection(text, name) {
-    const idx = text.indexOf(name);
-    if (idx === -1) return text; // fallback: search whole text
-    const nextSection = text.search(new RegExp('(?:EXTEM|INTEM|FIBTEM|APTEM|HEPTEM)', 'g'));
-    // Get 400 chars after the section header
-    return text.substring(idx, idx + 400);
-  }
-
-  const exSec  = getSection(t, 'EXTEM')  || t;
-  const inSec  = getSection(t, 'INTEM')  || t;
-  const fibSec = getSection(t, 'FIBTEM') || t;
-  const aptSec = getSection(t, 'APTEM')  || t;
-
-  const fields = [
-    { id:'extem-ct',    label:'EXTEM CT',       unit:'s',
-      val: extractNear(exSec,  [/CT\s*[:\s=]+(\d+(?:\.\d+)?)/,/\bCT\b[^\d]*(\d+)/]) },
-    { id:'extem-cft',   label:'EXTEM CFT',      unit:'s',
-      val: extractNear(exSec,  [/CFT\s*[:\s=]+(\d+(?:\.\d+)?)/,/\bCFT\b[^\d]*(\d+)/]) },
-    { id:'extem-alpha', label:'EXTEM Alpha',     unit:'°',
-      val: extractNear(exSec,  [/ALPHA\s*[:\s=]+(\d+(?:\.\d+)?)/,/ANGLE\s*[:\s=]+(\d+)/,/\bA\s*[:\s=]+(\d{2,3})\b/]) },
-    { id:'extem-mcf',   label:'EXTEM MCF',       unit:'mm',
-      val: extractNear(exSec,  [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/,/\bMCF\b[^\d]*(\d+)/]) },
-    { id:'extem-li30',  label:'EXTEM LI30',      unit:'%',
-      val: extractNear(exSec,  [/LI\s*30\s*[:\s=]+(\d+(?:\.\d+)?)/,/LI30\s*[:\s=]+(\d+)/]) },
-    { id:'extem-li60',  label:'EXTEM LI60',      unit:'%',
-      val: extractNear(exSec,  [/LI\s*60\s*[:\s=]+(\d+(?:\.\d+)?)/,/LI60\s*[:\s=]+(\d+)/]) },
-    { id:'intem-ct',    label:'INTEM CT',        unit:'s',
-      val: extractNear(inSec,  [/CT\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-    { id:'intem-cft',   label:'INTEM CFT',       unit:'s',
-      val: extractNear(inSec,  [/CFT\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-    { id:'intem-alpha', label:'INTEM Alpha',      unit:'°',
-      val: extractNear(inSec,  [/ALPHA\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-    { id:'intem-mcf',   label:'INTEM MCF',        unit:'mm',
-      val: extractNear(inSec,  [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-    { id:'fibtem-mcf',  label:'FIBTEM MCF',       unit:'mm',
-      val: extractNear(fibSec, [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-    { id:'fibtem-a5',   label:'FIBTEM A5',        unit:'mm',
-      val: extractNear(fibSec, [/A5\s*[:\s=]+(\d+(?:\.\d+)?)/,/A\s*5\s*[:\s=]+(\d+)/]) },
-    { id:'aptem-mcf',   label:'APTEM MCF',        unit:'mm',
-      val: extractNear(aptSec, [/MCF\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-    { id:'aptem-li30',  label:'APTEM LI30',       unit:'%',
-      val: extractNear(aptSec, [/LI\s*30\s*[:\s=]+(\d+(?:\.\d+)?)/]) },
-  ];
-
-  return fields.map(f => ({ ...f, found: f.val !== null, type: 'number' }));
-}
-
-// ---- HFA-PEFF OCR Parser ----
-function parseHFAPEFFText(rawText) {
-  const t = rawText;
-  const sex = document.getElementById('peff-sex').value;
-  const rhythm = document.getElementById('peff-rhythm').value;
-
-  function getNum(patterns) {
-    for (const pat of patterns) {
-      const m = t.match(pat);
-      if (m) { const v = parseFloat(m[1]); if (!isNaN(v)) return v; }
-    }
-    return null;
-  }
-
-  // Extract numeric values then map to dropdown category
-  const septalE = getNum([/septal\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i, /e[''`′]\s+sep\w*\s*[:\s=]+(\d+\.?\d*)/i, /sep\w*\s+e[''`′][:\s=]+(\d+\.?\d*)/i]);
-  const lateralE = getNum([/lat\w*\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i, /e[''`′]\s+lat\w*\s*[:\s=]+(\d+\.?\d*)/i]);
-  const ee = getNum([/e\s*\/\s*e[''`′]\s*(?:ratio|mean|avg|average)?\s*[:\s=]+(\d+\.?\d*)/i, /mean\s+e\/e[''`′]\s*[:\s=]+(\d+\.?\d*)/i, /e\/e[''`′][:\s=]+(\d+\.?\d*)/i]);
-  const trv = getNum([/tr\s*(?:velocity|vel|jet|vmax|peak)\s*[:\s=]+(\d+\.?\d*)/i, /tricuspid\s+regurg\w*\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i, /trv\s*[:\s=]+(\d+\.?\d*)/i]);
-  const gls = getNum([/gls\s*[:\s=]+[-−]?(\d+\.?\d*)/i, /global\s+long\w*\s+strain\s*[:\s=]+[-−]?(\d+\.?\d*)/i, /global\s+strain\s*[:\s=]+[-−]?(\d+\.?\d*)/i]);
-  const lavi = getNum([/lavi?\s*[:\s=]+(\d+\.?\d*)/i, /la\s+vol\w*\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i, /left\s+atrial?\s+vol\w*\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i]);
-  const lvmi = getNum([/lvmi?\s*[:\s=]+(\d+\.?\d*)/i, /lv\s+mass\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i, /left\s+vent\w*\s+mass\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i]);
-  const lvwt = getNum([/ivs\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)/i, /pw\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)/i, /sept\w*\s+thick\w*\s*[:\s=]+(\d+\.?\d*)/i, /wall\s+thick\w*\s*[:\s=]+(\d+\.?\d*)/i]);
-  const ntpro = getNum([/nt[\s-]*pro[\s-]*bnp\s*[:\s=]+(\d+\.?\d*)/i]);
-  const bnp   = getNum([/\bbnp\b\s*[:\s=]+(\d+\.?\d*)/i]);
-
-  // Map to dropdown values
-  function mapSeptal(v)  { if(v===null)return null; return v<7?'major':'none'; }
-  function mapLateral(v) { if(v===null)return null; return v<10?'major':'none'; }
-  function mapEE(v)      { if(v===null)return null; return v>=15?'major':v>=9?'minor':'none'; }
-  function mapTRV(v)     { if(v===null)return null; return v>2.8?'major':'none'; }
-  function mapGLS(v)     { if(v===null)return null; return Math.abs(v)<16?'minor':'none'; }
-  function mapLAVI(v)    { if(v===null)return null; return v>34?'major':v>=29?'minor':'none'; }
-  function mapLVWT(v)    { if(v===null)return null; return v>=12?'minor':'none'; }
-  function mapLVMI(v)    { if(v===null)return null;
-    const majCut=sex==='M'?149:122, minCut=sex==='M'?115:95;
-    return v>=majCut?'potential-major':(v>minCut?'minor':'none'); // potential-major needs RWT too
-  }
-  function mapBio() {
-    let nlo,nhi,nm,blo,bhi,bm;
-    if(rhythm==='SR'){nm=220;nlo=125;nhi=220;bm=80;blo=35;bhi=80;}
-    else{nm=660;nlo=365;nhi=660;bm=240;blo=105;bhi=240;}
-    if(ntpro!==null){return ntpro>nm?'major':ntpro>=nlo?'minor':'none';}
-    if(bnp!==null){return bnp>bm?'major':bnp>=blo?'minor':'none';}
-    return null;
-  }
-
-  const septalMapped=mapSeptal(septalE), lateralMapped=mapLateral(lateralE),
-        eeMapped=mapEE(ee), trvMapped=mapTRV(trv), glsMapped=mapGLS(gls),
-        laviMapped=mapLAVI(lavi), lvmiMapped=mapLVMI(lvmi), lvwtMapped=mapLVWT(lvwt),
-        bioMapped=mapBio();
-
-  function label(mapped, raw, unit) {
-    if (raw === null) return '—';
-    return `${raw} ${unit} → ${mapped === 'none' ? 'Not met' : mapped === 'potential-major' ? 'Minor (MAJOR if RWT>0.42)' : mapped.toUpperCase()}`;
-  }
-
-  return [
-    { id:'peff-septal',  label:"Septal e'",        found:septalE!==null,  val:septalMapped, display:label(septalMapped,septalE,'cm/s'),   raw:septalE,  type:'dropdown' },
-    { id:'peff-lateral', label:"Lateral e'",        found:lateralE!==null, val:lateralMapped,display:label(lateralMapped,lateralE,'cm/s'),  raw:lateralE, type:'dropdown' },
-    { id:'peff-ee',      label:"E/e' ratio",        found:ee!==null,       val:eeMapped,     display:label(eeMapped,ee,''),                 raw:ee,       type:'dropdown' },
-    { id:'peff-trv',     label:"TR velocity",       found:trv!==null,      val:trvMapped,    display:label(trvMapped,trv,'m/s'),             raw:trv,      type:'dropdown' },
-    { id:'peff-gls',     label:"GLS",               found:gls!==null,      val:glsMapped,    display:label(glsMapped,gls,'%'),               raw:gls,      type:'dropdown' },
-    { id:'peff-lavi',    label:"LAVI",              found:lavi!==null,     val:laviMapped,   display:label(laviMapped,lavi,'ml/m²'),         raw:lavi,     type:'dropdown' },
-    { id:'peff-lvmi',    label:"LVMI (+RWT)",       found:lvmi!==null,     val:lvmiMapped,   display:label(lvmiMapped,lvmi,'g/m²'),          raw:lvmi,     type:'dropdown' },
-    { id:'peff-lvwt',    label:"LV wall thickness", found:lvwt!==null,     val:lvwtMapped,   display:label(lvwtMapped,lvwt,'mm'),            raw:lvwt,     type:'dropdown' },
-    { id:'peff-bio',     label:"Natriuretic peptide",found:ntpro!==null||bnp!==null, val:bioMapped,
-      display: ntpro!==null?`NT-proBNP ${ntpro} → ${bioMapped}`:bnp!==null?`BNP ${bnp} → ${bioMapped}`:'—', raw:ntpro||bnp, type:'dropdown' },
-  ];
-}
-
-function renderOCRResults(results) {
-  const found = results.filter(r => r.found);
-  const notFound = results.filter(r => !r.found);
-  let html = '';
-  if (found.length === 0) {
-    html = '<div class="ocr-item not-found"><span>⚠️ No recognizable values detected. Try a clearer, well-lit photo or upload a higher-resolution image.</span></div>';
-  } else {
-    found.forEach(r => {
-      html += `<div class="ocr-item found">
-        <input type="checkbox" id="ocr-chk-${r.id}" checked>
-        <label for="ocr-chk-${r.id}" style="flex:1;cursor:pointer">
-          <span class="ocr-field-name">${r.label}</span>
-          <span class="ocr-field-val">${r.display}</span>
-        </label>
-      </div>`;
-    });
-    if (notFound.length > 0) {
-      html += `<div class="ocr-item not-found" style="font-size:12px;color:var(--muted)">Not detected: ${notFound.map(r=>r.label).join(', ')}</div>`;
-    }
-  }
-  document.getElementById('ocr-item-list').innerHTML = html;
-}
-
-function applyOCRValues() {
-  ocrResults.filter(r => r.found).forEach(r => {
-    const chk = document.getElementById('ocr-chk-' + r.id);
-    if (!chk || !chk.checked) return;
-
-    if (r.type === 'number') {
-      // ROTEM numeric fields
-      const el = document.getElementById(r.id);
-      if (el && r.val !== null) {
-        el.value = r.val;
-        // Mark as OCR filled
-        const fieldWrap = el.closest('.field');
-        if (fieldWrap) { fieldWrap.classList.add('ocr-filled'); fieldWrap.classList.remove('set-abnormal','set-normal'); }
-      }
-    } else {
-      // HFA-PEFF dropdown fields
-      const el = document.getElementById(r.id);
-      if (el && r.val !== null && r.val !== 'potential-major') {
-        // Find matching option
-        const opt = [...el.options].find(o => o.value === r.val);
-        if (opt) {
-          el.value = r.val;
-          const fieldWrap = el.closest('.field');
-          if (fieldWrap) fieldWrap.classList.add('ocr-filled');
-        }
-      } else if (r.val === 'potential-major' && el) {
-        // Map to minor (conservative — user needs to check RWT)
-        const opt = [...el.options].find(o => o.value === 'minor');
-        if (opt) { el.value = 'minor'; const fw = el.closest('.field'); if(fw) fw.classList.add('ocr-filled'); }
-      }
-    }
-  });
-
-  // Trigger recalculation
-  if (scanCalcMode === 'rotem') rotemCalc();
-  else peffRecalc();
-
-  closeScanModal();
-
-  // Show banner
-  const count = ocrResults.filter(r => {
-    const chk = document.getElementById('ocr-chk-' + r.id);
-    return r.found && chk && chk.checked;
-  }).length;
-
-  const banner = document.getElementById(scanCalcMode === 'rotem' ? 'rotem-ocr-banner' : 'peff-ocr-banner');
-  if (banner) {
-    banner.style.display = 'block';
-    banner.style.background = '#fffbeb';
-    banner.style.borderColor = '#fde68a';
-    banner.style.padding = '12px 16px';
-    banner.style.borderRadius = '10px';
-    banner.style.marginBottom = '16px';
-    banner.style.fontSize = '13px';
-    banner.innerHTML = `📷 <strong>${count} field${count!==1?'s':''} auto-filled from scan.</strong> Purple-highlighted fields were set by OCR — please review and adjust if needed. <button class="btn" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="clearOCRHighlights('${scanCalcMode}')">Clear highlights</button>`;
-  }
-}
-
-function clearOCRHighlights(mode) {
-  document.querySelectorAll('#page-' + (mode === 'rotem' ? 'rotem' : 'hfapeff') + ' .field').forEach(f => f.classList.remove('ocr-filled'));
-  const banner = document.getElementById(mode === 'rotem' ? 'rotem-ocr-banner' : 'peff-ocr-banner');
-  if (banner) banner.style.display = 'none';
-}
-
-// Add banner placeholder divs to ROTEM page
-document.addEventListener('DOMContentLoaded', () => {
-  const rotemPage = document.getElementById('page-rotem');
-  const banner = document.createElement('div');
-  banner.id = 'rotem-ocr-banner';
-  banner.style.display = 'none';
-  rotemPage.querySelector('.controls').after(banner);
-});
 </script>
 </body>
 </html>
