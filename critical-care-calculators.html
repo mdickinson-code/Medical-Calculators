@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Critical Care Calculators</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
   :root {
     --major:      #d94656;
@@ -78,6 +79,46 @@
 
   button.btn.danger { background: var(--red); color: #fff; border-color: var(--red); }
   button.btn.danger:hover { background: #b91c1c; }
+  button.btn.scan { background: #0f766e; color: #fff; border-color: #0f766e; }
+  button.btn.scan:hover { background: #0d6460; }
+
+  /* OCR auto-fill highlight */
+  .field.ocr-filled select, .field.ocr-filled input { border-color: #7c3aed; background-color: #f5f3ff; box-shadow: 0 0 0 2px rgba(124,58,237,0.15); }
+
+  /* ---- Camera / OCR Modal ---- */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:14px; width:min(680px,96vw); max-height:92vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); display:flex; flex-direction:column; }
+  .modal-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:#fff; z-index:1; border-radius:14px 14px 0 0; }
+  .modal-header h3 { margin:0; font-size:16px; }
+  .modal-close { background:none; border:none; font-size:22px; cursor:pointer; color:var(--muted); padding:0 4px; line-height:1; }
+  .modal-close:hover { color:var(--text); }
+  .modal-body { padding:20px; flex:1; }
+  .modal-footer { padding:14px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; background:#f8fafb; border-radius:0 0 14px 14px; }
+  .cam-container { position:relative; background:#0a0a0a; border-radius:8px; overflow:hidden; width:100%; aspect-ratio:4/3; display:flex; align-items:center; justify-content:center; }
+  #cam-video { width:100%; height:100%; object-fit:cover; display:none; }
+  #cam-canvas { width:100%; height:100%; object-fit:contain; display:none; }
+  .cam-placeholder { text-align:center; color:#aaa; padding:40px 20px; }
+  .cam-placeholder .cam-ph-icon { font-size:48px; margin-bottom:10px; }
+  .cam-placeholder p { margin:4px 0; font-size:14px; }
+  .cam-controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; justify-content:center; }
+  .ocr-status { margin-top:14px; padding:12px 14px; border-radius:8px; background:var(--accent-lt); border:1px solid #bfdbfe; font-size:13px; display:none; }
+  .ocr-status.visible { display:flex; align-items:center; gap:10px; }
+  .ocr-spinner { width:18px; height:18px; border:2px solid #93c5fd; border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; flex-shrink:0; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .ocr-results { margin-top:16px; display:none; }
+  .ocr-results.visible { display:block; }
+  .ocr-results h4 { margin:0 0 10px 0; font-size:14px; }
+  .ocr-item-list { display:flex; flex-direction:column; gap:6px; }
+  .ocr-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; font-size:13px; background:#f8fafc; border:1px solid var(--border); }
+  .ocr-item.found { background:var(--green-bg); border-color:#bbf7d0; }
+  .ocr-item.not-found { background:#f8fafc; color:var(--muted); }
+  .ocr-item input[type="checkbox"] { width:15px; height:15px; flex-shrink:0; accent-color:var(--accent); }
+  .ocr-item .ocr-field-name { font-weight:600; flex:1; }
+  .ocr-item .ocr-field-val { font-family:monospace; background:rgba(0,0,0,0.06); padding:2px 6px; border-radius:4px; }
+  .ocr-raw details { margin-top:12px; }
+  .ocr-raw summary { cursor:pointer; font-size:12px; color:var(--accent); }
+  .ocr-raw pre { font-size:11px; background:#f1f4f8; padding:10px; border-radius:6px; overflow-x:auto; white-space:pre-wrap; max-height:200px; overflow-y:auto; margin:6px 0 0 0; color:var(--muted); }
 
   /* ---- Cards ---- */
   .card {
@@ -220,6 +261,46 @@
 <body>
 
 <!-- ================================================================
+     CAMERA / OCR MODAL (HFA-PEFF)
+     ================================================================ -->
+<div class="modal-overlay" id="scan-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📷 Scan Echo Report — Auto-Fill HFA-PEFF</h3>
+      <button class="modal-close" onclick="closeScanModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="cam-container" id="cam-container">
+        <video id="cam-video" autoplay playsinline></video>
+        <canvas id="cam-canvas"></canvas>
+        <div class="cam-placeholder" id="cam-placeholder">
+          <div class="cam-ph-icon">📷</div>
+          <p><strong>Open camera or upload an image</strong></p>
+          <p style="font-size:12px;">Point at the echo report — each page can be scanned separately</p>
+        </div>
+      </div>
+      <div class="cam-controls">
+        <button class="btn scan" id="btn-open-camera" onclick="openCamera()">📷 Open Camera</button>
+        <button class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none">📸 Capture</button>
+        <button class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none">🔄 Retake</button>
+        <label class="btn" style="cursor:pointer">📁 Upload Image<input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)"></label>
+        <button class="btn primary" id="btn-analyze" onclick="runOCR()" style="display:none">🔍 Analyze</button>
+      </div>
+      <div class="ocr-status" id="ocr-status"><div class="ocr-spinner"></div><span id="ocr-status-text">Initializing…</span></div>
+      <div class="ocr-results" id="ocr-results">
+        <h4>Detected values — uncheck any you don't want applied:</h4>
+        <div class="ocr-item-list" id="ocr-item-list"></div>
+        <div class="ocr-raw"><details><summary>View raw OCR text</summary><pre id="ocr-raw-text"></pre></details></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeScanModal()">Cancel</button>
+      <button class="btn primary" id="btn-apply" onclick="applyOCRValues()" style="display:none">✅ Apply to Calculator</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
      SHELL
      ================================================================ -->
 <div class="shell">
@@ -257,7 +338,7 @@
         <div class="calc-card" onclick="showPage('hfapeff', document.querySelector('[data-page=hfapeff]'))">
           <div class="cc-icon">🫀</div>
           <p class="cc-title">HFA-PEFF Score</p>
-          <p class="cc-desc">Diagnostic algorithm for HFpEF. Scores functional, morphological, and biomarker domains.</p>
+          <p class="cc-desc">Diagnostic algorithm for HFpEF. Scores functional, morphological, and biomarker domains. Scan an echo report to auto-fill.</p>
           <span class="cc-tag">Heart Failure</span>
         </div>
         <div class="calc-card" onclick="showPage('pe', document.querySelector('[data-page=pe]'))">
@@ -278,8 +359,11 @@
 
       <div class="controls">
         <button class="btn primary" onclick="window.print()">🖨️ Print / PDF</button>
+        <button class="btn scan" onclick="openScanModal()">📷 Scan Echo Report</button>
         <button class="btn" onclick="peffResetAll()">↺ Reset</button>
       </div>
+
+      <div id="peff-ocr-banner" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;"></div>
 
       <div class="card">
         <h2>👤 Patient Context</h2>
@@ -646,6 +730,8 @@ function peffResetAll(){
   document.getElementById('peff-rhythm').value='SR';
   peffRebuild();
   document.querySelectorAll('#page-hfapeff .row select').forEach(s=>{s.selectedIndex=0;});
+  document.querySelectorAll('#page-hfapeff .field').forEach(f=>f.classList.remove('ocr-filled'));
+  const b=document.getElementById('peff-ocr-banner'); if(b) b.style.display='none';
   peffRecalc();
 }
 peffRebuild();
@@ -847,6 +933,442 @@ function peReset() {
   badge.textContent = '0 pts'; badge.className = 'badge zero';
 }
 
+
+// ----------------------------------------------------------------
+// CAMERA / OCR SYSTEM — HFA-PEFF Echo Report Scanner
+// ----------------------------------------------------------------
+let cameraStream = null;
+let capturedImageData = null;
+let ocrResults = [];
+
+function openScanModal() {
+  document.getElementById('scan-modal').classList.add('open');
+  resetModalState();
+}
+function closeScanModal() {
+  stopCamera();
+  document.getElementById('scan-modal').classList.remove('open');
+  resetModalState();
+}
+function resetModalState() {
+  stopCamera();
+  capturedImageData = null; ocrResults = [];
+  document.getElementById('cam-video').style.display = 'none';
+  document.getElementById('cam-canvas').style.display = 'none';
+  document.getElementById('cam-placeholder').style.display = 'flex';
+  document.getElementById('btn-open-camera').style.display = 'inline-flex';
+  document.getElementById('btn-capture').style.display = 'none';
+  document.getElementById('btn-retake').style.display = 'none';
+  document.getElementById('btn-analyze').style.display = 'none';
+  document.getElementById('btn-apply').style.display = 'none';
+  document.getElementById('ocr-status').classList.remove('visible');
+  document.getElementById('ocr-results').classList.remove('visible');
+  document.getElementById('file-input').value = '';
+}
+function stopCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
+  document.getElementById('cam-video').srcObject = null;
+}
+async function openCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} } });
+    const video = document.getElementById('cam-video');
+    video.srcObject = cameraStream; video.style.display = 'block';
+    document.getElementById('cam-canvas').style.display='none';
+    document.getElementById('cam-placeholder').style.display='none';
+    document.getElementById('btn-open-camera').style.display='none';
+    document.getElementById('btn-capture').style.display='inline-flex';
+    document.getElementById('btn-retake').style.display='none';
+    document.getElementById('btn-analyze').style.display='none';
+  } catch(err) { alert('Camera unavailable. Use "Upload Image" instead.\n\n'+err.message); }
+}
+function capturePhoto() {
+  const video=document.getElementById('cam-video'), canvas=document.getElementById('cam-canvas');
+  canvas.width=video.videoWidth||1280; canvas.height=video.videoHeight||720;
+  canvas.getContext('2d').drawImage(video,0,0);
+  capturedImageData=canvas.toDataURL('image/jpeg',0.95);
+  stopCamera(); video.style.display='none'; canvas.style.display='block';
+  document.getElementById('btn-capture').style.display='none';
+  document.getElementById('btn-retake').style.display='inline-flex';
+  document.getElementById('btn-analyze').style.display='inline-flex';
+}
+function retakePhoto() {
+  capturedImageData=null;
+  document.getElementById('cam-canvas').style.display='none';
+  document.getElementById('btn-retake').style.display='none';
+  document.getElementById('btn-analyze').style.display='none';
+  document.getElementById('btn-apply').style.display='none';
+  document.getElementById('ocr-results').classList.remove('visible');
+  document.getElementById('ocr-status').classList.remove('visible');
+  openCamera();
+}
+function handleFileUpload(event) {
+  const file=event.target.files[0]; if(!file) return;
+  stopCamera();
+  const reader=new FileReader();
+  reader.onload=e=>{
+    capturedImageData=e.target.result;
+    const canvas=document.getElementById('cam-canvas'), img=new Image();
+    img.onload=()=>{
+      canvas.width=img.width; canvas.height=img.height;
+      canvas.getContext('2d').drawImage(img,0,0);
+      canvas.style.display='block';
+      document.getElementById('cam-video').style.display='none';
+      document.getElementById('cam-placeholder').style.display='none';
+      document.getElementById('btn-open-camera').style.display='inline-flex';
+      document.getElementById('btn-capture').style.display='none';
+      document.getElementById('btn-retake').style.display='inline-flex';
+      document.getElementById('btn-analyze').style.display='inline-flex';
+      document.getElementById('ocr-results').classList.remove('visible');
+      document.getElementById('btn-apply').style.display='none';
+    };
+    img.src=capturedImageData;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runOCR() {
+  if (!capturedImageData) return;
+  const statusEl=document.getElementById('ocr-status'), statusText=document.getElementById('ocr-status-text');
+  statusEl.classList.add('visible');
+  document.getElementById('ocr-results').classList.remove('visible');
+  document.getElementById('btn-apply').style.display='none';
+  document.getElementById('btn-analyze').disabled=true;
+  try {
+    statusText.textContent='Loading OCR engine…';
+    const worker=await Tesseract.createWorker('eng',1,{
+      logger:m=>{
+        if(m.status==='recognizing text') statusText.textContent=`Recognizing… ${Math.round(m.progress*100)}%`;
+        else statusText.textContent=m.status.charAt(0).toUpperCase()+m.status.slice(1)+'…';
+      }
+    });
+    statusText.textContent='Analyzing image…';
+    const {data:{text}}=await worker.recognize(capturedImageData);
+    await worker.terminate();
+    document.getElementById('ocr-raw-text').textContent=text;
+    statusEl.classList.remove('visible');
+    ocrResults=parseEchoReportText(text);
+    renderOCRResults(ocrResults);
+    document.getElementById('ocr-results').classList.add('visible');
+    if(ocrResults.some(r=>r.found)) document.getElementById('btn-apply').style.display='inline-flex';
+  } catch(err) {
+    statusText.textContent='❌ OCR failed: '+err.message;
+  } finally {
+    document.getElementById('btn-analyze').disabled=false;
+  }
+}
+
+// ----------------------------------------------------------------
+// ECHO REPORT PARSER — HFA-PEFF field extraction
+// Handles: CHV tabular, Epic-style column, narrative, and mixed formats
+// ----------------------------------------------------------------
+function parseEchoReportText(rawText) {
+  const t = rawText;
+  const sex = document.getElementById('peff-sex').value;
+  const rhythm = document.getElementById('peff-rhythm').value;
+
+  // Extract first numeric value matching any of the patterns
+  function getNum(patterns) {
+    for (const pat of patterns) {
+      const m = t.match(pat);
+      if (m) { const v=parseFloat(m[1]); if(!isNaN(v)) return v; }
+    }
+    return null;
+  }
+
+  // ---- Extract key echo values ----
+
+  // Septal e' velocity (cm/s) — labeled variably across systems
+  const septalE = getNum([
+    /e[''`′]\s+sep(?:tal)?\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /sep(?:tal)?\s+e[''`′]\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /sep(?:tal)?\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i,
+    /e[''`′]\s*sep\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /e['′`]\s+sep\b[^a-z]*?(\d+\.?\d*)/i,
+  ]);
+
+  // Lateral e' velocity (cm/s)
+  const lateralE = getNum([
+    /e[''`′]\s+lat(?:eral)?\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /lat(?:eral)?\s+e[''`′]\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /lat(?:eral)?\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i,
+    /e[''`′]\s*lat\w*\s*[:\s=]+(\d+\.?\d*)/i,
+  ]);
+
+  // E/e' ratio — prefer average/mean; fall back to medial or lateral
+  // Many reports show E/E' Medial and E/E' Lateral separately
+  const eeAvg = getNum([
+    /e\/e[''`′]\s*(?:ratio\s*)?(?:average|avg|mean)\s*[:\s=]+(\d+\.?\d*)/i,
+    /mean\s+e\/e[''`′]\s*[:\s=]+(\d+\.?\d*)/i,
+    /e\/e[''`′]\s*average\s*[:\s=]+(\d+\.?\d*)/i,
+    /e\/e[''`′]\s*avg\s*[:\s=]+(\d+\.?\d*)/i,
+    /e\/e[''`′]\s*ratio\s*[:\s=]+(\d+\.?\d*)/i,
+  ]);
+  const eeSeptal = getNum([
+    /e\/e[''`′]\s*(?:sep(?:tal)?|medial)\s*[:\s=]+(\d+\.?\d*)/i,
+    /e[''`′]\s*medial\s*[:\s=]+(\d+\.?\d*)/i,   // E/E' Medial 11.00 (CHV format)
+    /medial\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i,
+    /e\/e[''`′]\s+sep\b[^a-z]*?(\d+\.?\d*)/i,
+  ]);
+  const eeLateral = getNum([
+    /e\/e[''`′]\s*lat(?:eral)?\s*[:\s=]+(\d+\.?\d*)/i,
+    /e[''`′]\s*lateral\s*[:\s=]+(\d+\.?\d*)/i,  // E/E' Lateral 7.30 (CHV format)
+    /lateral\s+e[''`′]\s*[:\s=]+(\d+\.?\d*)/i,
+    /e\/e[''`′]\s+lat\b[^a-z]*?(\d+\.?\d*)/i,
+  ]);
+  // Best E/e': use average if available; otherwise average medial+lateral if both; else use whichever is higher
+  let ee = eeAvg;
+  if (ee === null && eeSeptal !== null && eeLateral !== null) {
+    ee = Math.round(((eeSeptal + eeLateral) / 2) * 10) / 10;
+  } else if (ee === null) {
+    ee = eeSeptal ?? eeLateral;
+  }
+
+  // TR Peak Velocity — units can be cm/s or m/s depending on the system
+  // CHV format: "TR Peak Velocity 147.0 cm/s" → need m/s → 1.47
+  // Epic/other: "TR pk vel 3.22 m/s"
+  let trv = getNum([
+    /tr\s*(?:peak\s+)?vel\w*\s*[:\s=]+(\d+\.?\d*)\s*m\/s/i,
+    /tr\s*pk\s+vel\s*[:\s=]+(\d+\.?\d*)\s*m\/s/i,
+    /tricuspid\s+reg\w*\s+vel\w*\s*[:\s=]+(\d+\.?\d*)\s*m\/s/i,
+  ]);
+  if (trv === null) {
+    // No m/s match — try cm/s, then convert
+    const trvCms = getNum([
+      /tr\s*(?:peak\s+)?vel\w*\s*[:\s=]+(\d+\.?\d*)\s*cm\/s/i,
+      /tr\s*pk\s+vel\s*[:\s=]+(\d+\.?\d*)/i,
+      /tr\s*(?:peak\s+)?vel\w*\s*[:\s=]+(\d+\.?\d*)/i,
+      /tricuspid\s+reg\w*\s+vel\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    ]);
+    if (trvCms !== null) {
+      // If value >10, almost certainly in cm/s; divide by 100
+      trv = trvCms > 10 ? Math.round(trvCms / 100 * 100) / 100 : trvCms;
+    }
+  }
+
+  // RVSP — used as PASP estimate; primary fallback when TR velocity not reported
+  // RVSP > 35 mmHg ≈ TR velocity > 2.8 m/s (assuming RAP ~5–8 mmHg)
+  // When both are present, RVSP is shown alongside TRV for clinical context
+  const rvsp = getNum([
+    /rvsp\s*[:\s=]+(\d+\.?\d*)/i,
+    /r\.?v\.?\s*sys\w*\s+press\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /right\s+vent\w*\s+sys\w*\s+press\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /estimated\s+r\.?v\.?\s*press\w*\s*[:\s=]+(\d+\.?\d*)/i,
+  ]);
+
+  // GLS (global longitudinal strain) — reported as negative (e.g. -18.5%); less negative = worse
+  const gls = getNum([
+    /gls\s*[:\s=]+[-−]?(\d+\.?\d*)/i,
+    /global\s+long\w*\s+strain\s*[:\s=]+[-−]?(\d+\.?\d*)/i,
+    /global\s+strain\s*[:\s=]+[-−]?(\d+\.?\d*)/i,
+  ]);
+
+  // LAVI — LA volume index (mL/m²)
+  const lavi = getNum([
+    /la\s+vol\w*\s+index\s*\([^)]*\)\s*[:\s=]+(\d+\.?\d*)/i,   // "LA vol index (MOD 16-34) 54.7"
+    /la\s+vol\w*\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /lavi?\s*[:\s=]+(\d+\.?\d*)/i,
+    /left\s+atrial?\s+vol\w*\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /la\s+edv\s+index\s*\w*\s*[:\s=]+(\d+\.?\d*)/i,            // "LA EDV index A4C"
+  ]);
+
+  // LVMI — LV mass index (g/m²) — sex-specific thresholds applied in mapping
+  const lvmi = getNum([
+    /lv\s+mass\s+ind\w*\s*(?:2d|teich\w*)?\s*[:\s=]+(\d+\.?\d*)/i,
+    /lvedvi?\s*[:\s=]+(\d+\.?\d*)/i,                           // sometimes mislabeled
+    /lvmi?\s*[:\s=]+(\d+\.?\d*)/i,
+    /left\s+vent\w*\s+mass\s+ind\w*\s*[:\s=]+(\d+\.?\d*)/i,
+  ]);
+
+  // RWT (Relative Wall Thickness) — critical for LVMI major determination
+  // LVMI ≥ major cutoff + RWT > 0.42 = major morphological criterion
+  // LVMI ≥ major cutoff + RWT ≤ 0.42 = minor only
+  const rwt = getNum([
+    /\blv\s+rwt\s*[:\s=]+(\d+\.?\d*)/i,       // "LV RWT: 0.56" (Epic format)
+    /\brwt\s*[:\s=]+(\d+\.?\d*)/i,             // "RWT: 0.56"
+    /relative\s+wall\s+thick\w*\s*[:\s=]+(\d+\.?\d*)/i,
+    /lv\s+rw\s+thick\w*\s*[:\s=]+(\d+\.?\d*)/i,
+  ]);
+
+  // LV wall thickness (mm) — IVSd or posterior wall; ≥12 mm = minor
+  // Reports show IVSd in cm (e.g. 1.1 cm) or mm — we need mm
+  let lvwt = getNum([
+    /ivs\s*(?:d|s)?\s*(?:2d)?\s*[:\s=]+(\d+\.?\d*)\s*mm/i,
+    /ivsd?\s*[:\s=]+(\d+\.?\d*)\s*mm/i,
+    /pw\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)\s*mm/i,
+    /sep(?:tal)?\s+thick\w*\s*[:\s=]+(\d+\.?\d*)\s*mm/i,
+  ]);
+  if (lvwt === null) {
+    // Try cm — IVSd often reported in cm (e.g. 1.1 cm → 11 mm)
+    const lvwtCm = getNum([
+      /ivs\s*(?:d|s)?\s*(?:2d)?\s*[:\s=]+(\d+\.?\d*)\s*cm/i,
+      /lvpw\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)\s*cm/i,
+      /pw\s*(?:d|s)?\s*[:\s=]+(\d+\.?\d*)\s*cm/i,
+      /2d\s+sept\w*\s+diast\w*\s*[:\s=]+(\d+\.?\d*)\s*cm/i,
+      /2d\s+post\s+wall\s+diast\w*\s*[:\s=]+(\d+\.?\d*)\s*cm/i,
+    ]);
+    if (lvwtCm !== null && lvwtCm < 5) lvwt = Math.round(lvwtCm * 10 * 10) / 10; // cm → mm
+    else if (lvwtCm !== null) lvwt = lvwtCm; // already mm
+  }
+  if (lvwt === null) {
+    // Last resort: unitless IVSd or PW (could be cm or mm — apply heuristic)
+    const lvwtRaw = getNum([
+      /ivs\s*d?\s*[:\s=]+(\d+\.?\d*)/i,
+      /ivsd\s*[:\s=]+(\d+\.?\d*)/i,
+      /lvpwd?\s*[:\s=]+(\d+\.?\d*)/i,
+    ]);
+    if (lvwtRaw !== null) lvwt = lvwtRaw < 5 ? Math.round(lvwtRaw * 10 * 10)/10 : lvwtRaw;
+  }
+
+  // Natriuretic peptides
+  const ntpro = getNum([ /nt[\s-]*pro[\s-]*bnp\s*[:\s=]+(\d+\.?\d*)/i ]);
+  const bnp   = getNum([ /\bbnp\b\s*[:\s=]+(\d+\.?\d*)/i ]);
+
+  // ---- Map numeric values to HFA-PEFF dropdown categories ----
+  function mapSeptal(v)  { if(v===null)return null; return v<7?'major':'none'; }
+  function mapLateral(v) { if(v===null)return null; return v<10?'major':'none'; }
+  function mapEE(v)      { if(v===null)return null; return v>=15?'major':v>=9?'minor':'none'; }
+  // TR velocity mapping — use RVSP (PASP) as fallback if TRV not reported
+  // RVSP > 35 mmHg ≈ TRV > 2.8 m/s (RVSP = 4×TRV² + RAP, RAP ~5-8 mmHg typical)
+  function mapTRV(v)  { if(v===null)return null; return v>2.8?'major':'none'; }
+  function mapRVSP(v) { if(v===null)return null; return v>35?'major':'none'; }
+  function mapGLS(v)     { if(v===null)return null; return Math.abs(v)<16?'minor':'none'; }
+  function mapLAVI(v)    { if(v===null)return null; return v>34?'major':v>=29?'minor':'none'; }
+  function mapLVWT(v)    { if(v===null)return null; return v>=12?'minor':'none'; }
+  function mapLVMI(v) {
+    if(v===null) return null;
+    const majCut=sex==='M'?149:122, minCut=sex==='M'?115:95;
+    if (v >= majCut) {
+      // If RWT is known, resolve definitively; otherwise flag as potential-major
+      if (rwt !== null) return rwt > 0.42 ? 'major' : 'minor';
+      return 'potential-major';
+    }
+    return v > minCut ? 'minor' : 'none';
+  }
+  function mapBio() {
+    let nm,nlo,bm,blo;
+    if(rhythm==='SR'){nm=220;nlo=125;bm=80;blo=35;}
+    else{nm=660;nlo=365;bm=240;blo=105;}
+    if(ntpro!==null) return ntpro>nm?'major':ntpro>=nlo?'minor':'none';
+    if(bnp!==null)   return bnp>bm?'major':bnp>=blo?'minor':'none';
+    return null;
+  }
+
+  function label(mapped, raw, unit, note) {
+    if(raw===null) return '—';
+    const cat = mapped==='none'?'Not met':mapped==='potential-major'?'Minor (MAJOR if RWT>0.42)':mapped.toUpperCase();
+    return `${raw}${unit?` ${unit}`:''} → ${cat}${note?` (${note})`:''}`;
+  }
+
+  // E/e' display: show how the average was derived
+  let eeNote = '';
+  if (eeAvg !== null) eeNote = '';
+  else if (eeSeptal!==null && eeLateral!==null) eeNote = `avg of sep ${eeSeptal} + lat ${eeLateral}`;
+  else if (eeSeptal!==null) eeNote = 'septal only';
+  else if (eeLateral!==null) eeNote = 'lateral only';
+
+  // TR velocity / RVSP display
+  // If TRV found: use it; also note RVSP if present for clinical context
+  // If TRV not found but RVSP found: use RVSP as PASP estimate (>35 mmHg = major)
+  const trvMapped  = mapTRV(trv);
+  const rvspMapped = mapRVSP(rvsp);
+  let trvFound, trvVal, trvDisplay;
+  if (trv !== null) {
+    trvFound = true;
+    trvVal = trvMapped;
+    const rvspNote = rvsp !== null ? `, RVSP/PASP ${rvsp} mmHg` : '';
+    trvDisplay = `${trv} m/s → ${trvMapped==='major'?'MAJOR':'Not met'}${rvspNote}`;
+  } else if (rvsp !== null) {
+    trvFound = true;
+    trvVal = rvspMapped;
+    trvDisplay = `RVSP/PASP ${rvsp} mmHg → ${rvspMapped==='major'?'MAJOR':'Not met'} (TRV not reported)`;
+  } else {
+    trvFound = false;
+    trvVal = null;
+    trvDisplay = '—';
+  }
+
+  // LVMI display — reflect whether RWT resolved major vs minor
+  const eeMapped   = mapEE(ee);
+  const sepMapped  = mapSeptal(septalE);
+  const latMapped  = mapLateral(lateralE);
+  const glsMapped  = mapGLS(gls);
+  const laviMapped = mapLAVI(lavi);
+  const lvmiMapped = mapLVMI(lvmi);
+  const lvwtMapped = mapLVWT(lvwt);
+  const bioMapped  = mapBio();
+
+  let lvmiDisplay = '—';
+  if (lvmi !== null) {
+    const majCut=sex==='M'?149:122, minCut=sex==='M'?115:95;
+    if (lvmi >= majCut && rwt !== null) {
+      lvmiDisplay = `${lvmi} g/m² + RWT ${rwt} → ${lvmiMapped.toUpperCase()}`;
+    } else if (lvmi >= majCut) {
+      lvmiDisplay = `${lvmi} g/m² → Minor (MAJOR if RWT>0.42 — scan morphology page)`;
+    } else {
+      lvmiDisplay = label(lvmiMapped, lvmi, 'g/m²');
+    }
+  }
+
+  return [
+    { id:'peff-septal',  label:"Septal e'",          found:septalE!==null,  val:sepMapped,  display:label(sepMapped,septalE,'cm/s'),       type:'dropdown' },
+    { id:'peff-lateral', label:"Lateral e'",          found:lateralE!==null, val:latMapped,  display:label(latMapped,lateralE,'cm/s'),      type:'dropdown' },
+    { id:'peff-ee',      label:"E/e' ratio",          found:ee!==null,       val:eeMapped,   display:label(eeMapped,ee,'',eeNote),          type:'dropdown' },
+    { id:'peff-trv',     label:"TR velocity / RVSP",  found:trvFound,        val:trvVal,     display:trvDisplay,                            type:'dropdown' },
+    { id:'peff-gls',     label:"GLS",                 found:gls!==null,      val:glsMapped,  display:label(glsMapped,gls,'%'),              type:'dropdown' },
+    { id:'peff-lavi',    label:"LAVI",                found:lavi!==null,     val:laviMapped, display:label(laviMapped,lavi,'mL/m²'),        type:'dropdown' },
+    { id:'peff-lvmi',    label:"LVMI (+ RWT)",        found:lvmi!==null,     val:lvmiMapped, display:lvmiDisplay,                           type:'dropdown' },
+    { id:'peff-lvwt',    label:"LV wall thickness",   found:lvwt!==null,     val:lvwtMapped, display:label(lvwtMapped,lvwt,'mm'),           type:'dropdown' },
+    { id:'peff-bio',     label:"Natriuretic peptide", found:ntpro!==null||bnp!==null, val:bioMapped,
+      display:ntpro!==null?`NT-proBNP ${ntpro} → ${bioMapped??'?'}`:bnp!==null?`BNP ${bnp} → ${bioMapped??'?'}`:'—', type:'dropdown' },
+  ];
+}
+
+function renderOCRResults(results) {
+  const found=results.filter(r=>r.found), notFound=results.filter(r=>!r.found);
+  let html='';
+  if(found.length===0){
+    html='<div class="ocr-item not-found"><span>⚠️ No recognizable values detected. Try a clearer image — make sure the text is sharp and well-lit. Multiple pages can be scanned separately.</span></div>';
+  } else {
+    found.forEach(r=>{
+      html+=`<div class="ocr-item found">
+        <input type="checkbox" id="ocr-chk-${r.id}" checked>
+        <label for="ocr-chk-${r.id}" style="flex:1;cursor:pointer">
+          <span class="ocr-field-name">${r.label}</span>
+          <span class="ocr-field-val">${r.display}</span>
+        </label>
+      </div>`;
+    });
+    if(notFound.length>0){
+      html+=`<div class="ocr-item not-found" style="font-size:12px;color:var(--muted)">Not detected: ${notFound.map(r=>r.label).join(', ')}</div>`;
+    }
+  }
+  document.getElementById('ocr-item-list').innerHTML=html;
+}
+
+function applyOCRValues() {
+  let count=0;
+  ocrResults.filter(r=>r.found).forEach(r=>{
+    const chk=document.getElementById('ocr-chk-'+r.id);
+    if(!chk||!chk.checked) return;
+    const el=document.getElementById(r.id);
+    if(!el||r.val===null) return;
+    if(r.val==='potential-major'){
+      const opt=[...el.options].find(o=>o.value==='minor');
+      if(opt){el.value='minor'; el.closest('.field').classList.add('ocr-filled'); count++;}
+    } else {
+      const opt=[...el.options].find(o=>o.value===r.val);
+      if(opt){el.value=r.val; el.closest('.field').classList.add('ocr-filled'); count++;}
+    }
+  });
+  peffRecalc();
+  closeScanModal();
+  if(count>0){
+    const banner=document.getElementById('peff-ocr-banner');
+    banner.style.display='block';
+    banner.innerHTML=`📷 <strong>${count} field${count!==1?'s':''} auto-filled from scan.</strong> Purple-highlighted fields were set by OCR — review and adjust if needed. <button class="btn" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="document.querySelectorAll('#page-hfapeff .field').forEach(f=>f.classList.remove('ocr-filled'));this.closest('[id]').style.display='none'">Clear</button>`;
+  }
+}
 
 </script>
 </body>
